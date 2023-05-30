@@ -14,7 +14,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name="peachdb",
-    version="0.0.6",
+    version="0.0.7",
     packages=find_packages(),
     install_requires=requirements,
     dependency_links=["https://download.pytorch.org/whl/cu113"],
