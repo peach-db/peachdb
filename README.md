@@ -17,13 +17,13 @@ Setup [Modal](https://modal.com)
 - Setup token: `modal token new`
 
 (optional)
-To use S3 URIs for your dataset and embedding storage, configure your .env file as below.
+PeachDB accepts local & S3 paths to datasets for embedding computation. To use S3 URIs, configure your .env file as below.
 ```python
-# Setup your AWS CLI, if you haven't already done so
 # Fetch the below values from ~/.aws/credentials
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 ```
+Please ensure the credentials have read & write access to the relevant bucket you plan to use.
 
 <br/>
 
@@ -57,15 +57,17 @@ db.deploy()
 ```
 
 ## Why another embedding database?
-PeachDB puts embeddings at the forefront! We've streamlined the entire end-to-end lifecycle of managing embeddings, making it developer-friendly, seamless, and cost-effective. You no longer have to build custom pipelines or fret over hardware setups & scalability issues. PeachDB ensures you can get started within minutes, leaving the worries of cost optimization and scale to us.
+We've streamlined the entire end-to-end process of creating, storing, and retrieving embeddings, making it developer-friendly, seamless, and cost-effective. You no longer have to build custom pipelines or fret over hardware setups & scalability issues. PeachDB ensures you can get started within minutes, leaving the worries of cost optimization and scale to us.
 
 Our key features include:
 * **Automated, cost-effective & large-scale embedding computation**: We leverage serverless GPU functions (through [Modal](https://modal.com/)) to compute embeddings on a large scale efficiently and affordably.
     - For instance, we processed the [Kaggle 5M song lyrics dataset](https://www.kaggle.com/datasets/nikhilnayak123/5-million-song-lyrics-dataset?resource=download&select=ds2.csv) in just *12 minutes at a cost of $4.90*, using sentence transformers!
     - We've developed a Modal wrapper for [Sentence Transformer L12](https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2).
-        - Coming soon: Modal wrappers for OpenAI, Cohere, ImageBind, and more.
+        - Coming soon: Modal wrappers for open-source embedding models such as [ImageBind](https://github.com/facebookresearch/ImageBind), [OpenCLIP](https://github.com/mlfoundations/open_clip), and more.
+        - Coming soon: Support for multi-threaded [OpenAI](https://platform.openai.com/docs/guides/embeddings) embedding calculation.
     - Coming soon: Bring your own embeddings.
     - Coming soon: Custom embedding functions for even more flexibility.
+* **Multimodality**: Native support for data with mixture of modalities (such as image/audio/video).
 * **Highly Customizable**: PeachDB allows you to tailor its features to your needs. You can customize:
     - Embedding computation: as described above.
     - Backend: choose between `exact_cpu` (numpy), `exact_gpu` (torch), or `approx` (HNSW).
@@ -91,21 +93,24 @@ Below is an example of creating a web server for a music recommendation app. To 
 - Create a new module inside the directory `server.py`
 - Add the following code
 ```python
-import kaggle # make sure you've run `pip install kaggle`
-import os
-
 from peachdb import PeachDB
 
+import os
 os.environ['KAGGLE_USERNAME'] = None # set user name
 os.environ['KAGGLE_KEY'] = None # set key
 
-kaggle.api.authenticate()
-kaggle.api.dataset_download_files('nikhilnayak123/5-million-song-lyrics-dataset', path='/path/to/save', unzip=True)
+import kaggle # make sure you've run `pip install kaggle`
 
+kaggle.api.authenticate()
+kaggle.api.dataset_download_files(
+    'nikhilnayak123/5-million-song-lyrics-dataset',
+    path='.',
+    unzip=True
+)
 
 db = PeachDB.create(
     project_name="spoti_vibe",
-    csv_path="/path/to/local/csv",
+    csv_path='./ds2.csv',  # dataset name as observed on Kaggle
     column_to_embed="lyrics",
     id_column_name="id",
     max_rows=None,
@@ -116,7 +121,8 @@ db = PeachDB.create(
 
 db.deploy() # Public URL will be printed to console
 ```
-And that's it! You should now have a publicly available server that can listen to query requests from the user on: `GET <PUBLIC_URL>/query?text=''&top_k=5`
+
+And that's it! You should now have a publicly available server that can listen to query requests from the user on: `GET <PUBLIC_URL>/query?text='Happy, upbeat summer'&top_k=5`
 
 
 ## FAQs
