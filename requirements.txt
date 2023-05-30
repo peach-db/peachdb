@@ -13,3 +13,4 @@ fastapi
 hnswlib
 pyngrok==6.0.0
 requests
+modal-client
