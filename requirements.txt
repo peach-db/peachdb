@@ -1,0 +1,15 @@
+duckdb==0.7.1
+fastapi[all]
+torch
+sentence-transformers
+rich
+black
+isort
+numpy
+pandas
+pyarrow
+tqdm
+fastapi
+hnswlib @ git+https://github.com/nmslib/hnswlib
+pyngrok==6.0.0
+requests
