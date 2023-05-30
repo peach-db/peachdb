@@ -1,5 +1,4 @@
 import os
-import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -9,6 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import requests
 
+from peachdb.constants import CACHED_REQUIREMENTS_TXT, GIT_REQUIREMENTS_TXT
 from peachdb.embedder.utils import is_s3_uri
 
 # Logic to get a requirements.txt file for the base image when package is on PyPI.
@@ -16,15 +16,14 @@ dev_requirements_path = Path(__file__).parents[3] / "requirements.txt"
 if os.path.exists(dev_requirements_path):
     requirements_path = dev_requirements_path
 else:
-    requirements_url = "https://raw.githubusercontent.com/peach-db/peachdb/master/requirements.txt"
-    response = requests.get(requirements_url)
+    response = requests.get(GIT_REQUIREMENTS_TXT)
 
-    # Ensure that the request was successful
     response.raise_for_status()
 
-    temp_file = tempfile.NamedTemporaryFile(delete=True)
-    temp_file.write(response.content)
-    requirements_path = temp_file.name
+    with open(CACHED_REQUIREMENTS_TXT, "w") as f:
+        f.write(response.text)
+
+    requirements_path = CACHED_REQUIREMENTS_TXT
 
 # Requirements for the base image of models we want to serve.
 # We don't add the requirements.txt here as that contains requirements across ALL our models.
