@@ -10,6 +10,6 @@ pandas
 pyarrow
 tqdm
 fastapi
-hnswlib @ git+https://github.com/nmslib/hnswlib
+hnswlib
 pyngrok==6.0.0
 requests
