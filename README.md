@@ -69,13 +69,7 @@ Below is a walkthrough of creating a web server for a music recommendation app. 
     - Install the modal-client package: `pip install modal-client`
     - Setup token: `modal token new`
 
-- (optional) PeachDB accepts local & S3 paths to datasets for embedding computation. To use S3 URIs, create & configure your .env file as below.
-    ```python
-    # Fetch the below values from ~/.aws/credentials
-    AWS_ACCESS_KEY_ID=
-    AWS_SECRET_ACCESS_KEY=
-    ```
-    Please ensure the credentials have read & write access to the relevant bucket you plan to use.
+- (optional: for AWS S3) PeachDB accepts local & S3 paths to datasets for embedding computation. To use S3 URIs, ensure you've installed the `aws` cli and run `aws configure`. The credentials should have read & write access to the relevant bucket you plan to use.
 - `mkdir spoti_vibe/`
 - Create a new module inside the directory `server.py`
 - Add the following code
