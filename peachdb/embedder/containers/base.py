@@ -56,6 +56,8 @@ base_container_image = (
         "rm -rf awscliv2.zip aws",
     )
     .pip_install_from_requirements(requirements_path)
+    # Container creation flow from inside a pypi package doesn't pick up it's own files.
+    .pip_install("git+https://github.com/peach-db/peachdb")
 )
 
 modal_compute_spec_decorator = lambda stub, image: stub.cls(
