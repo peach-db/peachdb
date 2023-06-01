@@ -30,7 +30,7 @@ jobs:
     - name: Run bumpversion
       run: >-
         python3 -m
-        bumpversion
+        bumpversion patch
         --allow-dirty
 
     - name: Build a binary wheel and a source tarball
