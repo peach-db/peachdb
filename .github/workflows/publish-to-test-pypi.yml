@@ -28,10 +28,10 @@ jobs:
         --user
 
     - name: Run bumpversion
-      run: >-
-        python3 -m
-        bumpversion patch
-        --allow-dirty
+      run: |
+        git config --global user.name "Bumpversion Action"
+        git config --global user.email "bumpversion@themetavoice.xyz"
+        python3 -m bumpversion patch --allow-dirty
 
     - name: Build a binary wheel and a source tarball
       run: >-
