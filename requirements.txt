@@ -16,3 +16,4 @@ requests
 modal-client
 boto3
 bumpversion
+pre-commit
