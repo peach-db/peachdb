@@ -192,7 +192,7 @@ class PeachDB(_Base):
 
     @staticmethod
     def _validate_embedding_generator(engine: str):
-        supported_engines = ["sentence_transformer_L12"]
+        supported_engines = ["sentence_transformer_L12", "imagebind"]
         assert (
             engine in supported_engines
         ), f"Unsupported embedding generator. Currently supported engines are: {', '.join(supported_engines)}"

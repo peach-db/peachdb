@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from rich import print
 
+from peachdb.embedder.models.multimodal_imagebind import ImageBindModel
 from peachdb.embedder.models.sentence_transformer import SentenceTransformerModel
 from peachdb.embedder.utils import S3File, S3Folder, is_s3_uri
 
@@ -29,6 +30,8 @@ class BackendBase(abc.ABC):
 
         if embedding_generator == "sentence_transformer_L12":
             self._encoder = SentenceTransformerModel()
+        elif embedding_generator == "imagebind":
+            self._encoder = ImageBindModel()
         else:
             raise ValueError(f"Unknown embedding generator: {embedding_generator}")
 

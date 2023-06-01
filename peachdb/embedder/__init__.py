@@ -40,6 +40,12 @@ class EmbeddingProcessor:
             self._embedding_model = SentenceTransformerEmbedder
             self._embedding_model_stub = sbert_stub
             self._embedding_model_chunk_size = 10000
+        elif self._embedding_model_name == "imagebind":
+            from peachdb.embedder.containers.multimodal_imagebind import ImageBindEmbdedder, imagebind_stub
+
+            self._embedding_model = ImageBindEmbdedder
+            self._embedding_model_stub = imagebind_stub
+            self._embedding_model_chunk_size = 1000
         else:
             raise ValueError(f"Invalid embedding model name: {self._embedding_model_name}")
 
