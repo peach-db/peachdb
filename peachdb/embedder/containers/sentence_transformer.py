@@ -1,3 +1,5 @@
+from typing import Optional
+
 import modal
 
 from peachdb.embedder.containers.base import EmbeddingModelBase, base_container_image, modal_compute_spec_decorator
@@ -20,16 +22,56 @@ class SentenceTransformerEmbedder(EmbeddingModelBase):
     def __enter__(self):
         self.model = SentenceTransformerModel()
 
-    def _calculate_embeddings(self, texts, show_progress_bar: bool):
+    def _calculate_text_embeddings(self, texts, show_progress_bar: bool):
         return self.model.encode(
             texts,
             batch_size=SENTENCE_TRANSFORMER_BATCH_SIZE,
             show_progress_bar=show_progress_bar,
         )
 
+    # TODO: are defining these functions necessary?
+    def _calculate_audio_embeddings(self, audio_paths, show_progress_bar: bool):
+        raise NotImplementedError
+
+    def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool):
+        raise NotImplementedError
+
+    @staticmethod
+    @property
+    def _can_take_text_input():
+        return True
+
+    @staticmethod
+    @property
+    def _can_take_audio_input():
+        return False
+
+    @staticmethod
+    @property
+    def _can_take_image_input():
+        # return True - once implemented!
+        return False
+
+    # We need to rewrite this function in all the inherited class so we can use the @modal method decorator.
+    # TODO: check if above statement is true / if we can factor this out.
     @modal.method()
-    def calculate_embeddings(self, texts, ids, s3_bucket: str, show_progress_bar: bool):
-        return super().calculate_embeddings(texts, ids, s3_bucket, show_progress_bar)
+    def calculate_embeddings(
+        self,
+        ids: list,
+        output_path: str,
+        texts: Optional[list] = None,
+        audio_paths: Optional[list] = None,
+        image_paths: Optional[list] = None,
+        show_progress_bar: bool = False,
+    ):
+        return super().calculate_embeddings(
+            ids=ids,
+            output_path=output_path,
+            texts=texts,
+            audio_paths=audio_paths,
+            image_paths=image_paths,
+            show_progress_bar=show_progress_bar,
+        )
 
 
 # We have a function here instead of putting it into __main__ so that `modal shell` works
@@ -37,9 +79,9 @@ class SentenceTransformerEmbedder(EmbeddingModelBase):
 def test(s3_bucket_path: str):
     st = SentenceTransformerEmbedder()
     embeddings = st.calculate_embeddings.call(
-        ["hello", "world"],
-        [1, 2],
-        s3_bucket_path,
+        texts=["hello", "world"],
+        ids=[1, 2],
+        output_path=s3_bucket_path,
         show_progress_bar=True,
     )
 

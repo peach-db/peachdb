@@ -1,7 +1,10 @@
+from typing import Optional
+
 import modal
 
 from peachdb.embedder.containers.base import EmbeddingModelBase, base_container_image, modal_compute_spec_decorator
 from peachdb.embedder.models.multimodal_imagebind import ImageBindModel
+from peachdb.embedder.utils import S3File, is_s3_uri
 
 IMAGEBIND_BATCH_SIZE = 1024
 
@@ -20,22 +23,82 @@ class ImageBindEmbdedder(EmbeddingModelBase):
     def __enter__(self):
         self.model = ImageBindModel()
 
-    def _calculate_embeddings(self, texts, show_progress_bar: bool):
-        return self.model.encode(texts, IMAGEBIND_BATCH_SIZE, show_progress_bar)
+    def _calculate_text_embeddings(self, texts, show_progress_bar: bool):
+        return self.model.encode_text(texts, IMAGEBIND_BATCH_SIZE, show_progress_bar)
 
+    def _calculate_audio_embeddings(self, audio_paths, show_progress_bar: bool):
+        # TODO: do we want IMAGEBIND_BATCH_SIZE for audio same as for text?
+        return self.model.encode_audio(audio_paths, IMAGEBIND_BATCH_SIZE, show_progress_bar)
+
+    @staticmethod
+    @property
+    def _can_take_text_input():
+        return True
+
+    @staticmethod
+    @property
+    def _can_take_audio_input():
+        return True
+
+    @staticmethod
+    @property
+    def _can_take_image_input():
+        # return True - once implemented!
+        raise NotImplementedError
+
+    # We need to rewrite this function in all the inherited class so we can use the @modal method decorator.
+    # TODO: check if above statement is true / if we can factor this out.
     @modal.method()
-    def calculate_embeddings(self, texts, ids, s3_bucket: str, show_progress_bar: bool):
-        return super().calculate_embeddings(texts, ids, s3_bucket, show_progress_bar)
+    def calculate_embeddings(
+        self,
+        ids: list,
+        output_path: str,
+        texts: Optional[list] = None,
+        audio_paths: Optional[list] = None,
+        image_paths: Optional[list] = None,
+        show_progress_bar: bool = False,
+    ):
+        return super().calculate_embeddings(
+            ids=ids,
+            output_path=output_path,
+            texts=texts,
+            audio_paths=audio_paths,
+            image_paths=image_paths,
+            show_progress_bar=show_progress_bar,
+        )
 
 
 # We have a function here instead of putting it into __main__ so that `modal shell` works
 @imagebind_stub.function(image=image)
-def test(s3_bucket_path: str):
+def test_texts(s3_bucket_path: str):
     ib = ImageBindEmbdedder()
     embeddings = ib.calculate_embeddings.call(
-        ["hello", "world"],
-        [1, 2],
-        s3_bucket_path,
+        texts=["hello", "world"],
+        ids=[1, 2],
+        output_path=s3_bucket_path,
+        show_progress_bar=True,
+    )
+
+
+@imagebind_stub.function(image=image)
+def test_audio(s3_bucket_path: str):
+    ib = ImageBindEmbdedder()
+    embeddings = ib.calculate_embeddings.call(
+        audio_paths=["s3://clip-audio-deploy/audioset/---1_cCGK4M.flac"] * 2,
+        ids=list(range(2)),
+        output_path=s3_bucket_path,
+        show_progress_bar=True,
+    )
+
+
+@imagebind_stub.function(image=image)
+def test_texts_audio(s3_bucket_path: str):
+    ib = ImageBindEmbdedder()
+    embeddings = ib.calculate_embeddings.call(
+        texts=["hello", "world"],
+        audio_paths=["s3://clip-audio-deploy/audioset/---1_cCGK4M.flac"] * 2,
+        ids=list(range(2)),
+        output_path=s3_bucket_path,
         show_progress_bar=True,
     )
 
@@ -45,4 +108,6 @@ if __name__ == "__main__":
     import sys
 
     with imagebind_stub.run():
-        test.call(sys.argv[1])
+        test_texts.call(sys.argv[1])
+        test_audio.call(sys.argv[1])
+        test_texts_audio.call(sys.argv[1])
