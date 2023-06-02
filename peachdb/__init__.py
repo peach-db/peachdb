@@ -48,10 +48,14 @@ class PeachDB(_Base):
         distance_metric: str = "cosine",
         embedding_backend: str = "exact_cpu",
     ):
+        PeachDB._validate_embedding_generator(embedding_generator)
+        PeachDB._validate_distance_metric(distance_metric)
+        PeachDB._validate_embedding_backend(embedding_backend)
         super().__init__()
         self._project_name = project_name
         self._embeddings_dir = None
         self._metadata_path = None
+        self._embedding_generator = embedding_generator
 
         with shelve.open(SHELVE_DB) as shelve_db:
             if self._project_name in shelve_db.keys():
@@ -59,10 +63,26 @@ class PeachDB(_Base):
                 self._metadata_path = shelve_db[self._project_name]["metadata_path"]
                 self._id_column_name = shelve_db[self._project_name]["id_column_name"]
             else:
+                # create new shelve_db entry and log to user.
                 raise ValueError(
                     f"Project name: {project_name} not found. Creating an empty PeachDB is not supported yet, please use PeachDB.create"
                 )
+                # TODO: fix!
+                with shelve.open(SHELVE_DB) as db:
+                    db[project_name] = {
+                        "metadata_path": csv_path,
+                        "column_to_embed": column_to_embed,
+                        "id_column_name": id_column_name,
+                        "max_rows": max_rows,
+                        "embedding_generator": embedding_generator,
+                        "distance_metric": distance_metric,
+                        "embedding_backend": embedding_backend,
+                        "embeddings_dir": processor.embeddings_output_dir,
+                        "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
+                    }
+                print(f"[u]PeachDB has been created for project: [bold green]{project_name}[/bold green][/u]")
 
+        # TODO: we probably need to remove this, and handle this somewhere else?
         self._db = get_backend(
             embedding_generator=embedding_generator,
             embedding_backend=embedding_backend,
@@ -108,22 +128,14 @@ class PeachDB(_Base):
     def upsert(self, text: str):
         raise NotImplementedError
 
-    @staticmethod
-    def create(
-        project_name: str,
+    def upsert_text(
+        self,
         csv_path: str,
         column_to_embed: str,
         id_column_name: str,
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
-        embedding_generator: str = "sentence_transformer_L12",
-        embedding_backend: str = "exact_cpu",
-        distance_metric: str = "cosine",
-    ) -> "PeachDB":
-        PeachDB._ensure_unique_project_name(project_name)
-        PeachDB._validate_embedding_generator(embedding_generator)
-        PeachDB._validate_distance_metric(distance_metric)
-        PeachDB._validate_embedding_backend(embedding_backend)
+    ):
         PeachDB._validate_csv_path(csv_path)
         assert column_to_embed
         assert id_column_name
@@ -138,33 +150,41 @@ class PeachDB(_Base):
             column_to_embed=column_to_embed,
             id_column_name=id_column_name,
             max_rows=max_rows,
-            embedding_model_name=embedding_generator,
-            project_name=project_name,
+            embedding_model_name=self._embedding_generator,
+            project_name=self._project_name,
             s3_bucket=embeddings_output_s3_bucket_uri,
         )
 
         processor.process()
 
-        with shelve.open(SHELVE_DB) as db:
-            db[project_name] = {
-                "metadata_path": csv_path,
-                "column_to_embed": column_to_embed,
-                "id_column_name": id_column_name,
-                "max_rows": max_rows,
-                "embedding_generator": embedding_generator,
-                "distance_metric": distance_metric,
-                "embedding_backend": embedding_backend,
-                "embeddings_dir": processor.embeddings_output_dir,
-                "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
-            }
+    def upsert_audio(
+        self,
+        csv_path: str,
+        column_to_embed: str,
+        id_column_name: str,
+        embeddings_output_s3_bucket_uri: Optional[str] = None,
+        max_rows: Optional[int] = None,
+    ):
+        PeachDB._validate_csv_path(csv_path)
+        assert column_to_embed
+        assert id_column_name
 
-        print(f"[u]PeachDB has been created for project: [bold green]{project_name}[/bold green][/u]")
-        return PeachDB(
-            project_name,
-            embedding_generator=embedding_generator,
-            distance_metric=distance_metric,
-            embedding_backend=embedding_backend,
-        )
+        if is_s3_uri(csv_path):
+            assert (
+                embeddings_output_s3_bucket_uri
+            ), "Please provide `embeddings_output_s3_bucket_uri` for output embeddings when the `csv_path` is an S3 URI."
+
+        processor = EmbeddingProcessor(
+            csv_path=csv_path,
+            column_to_embed=column_to_embed,
+            id_column_name=id_column_name,
+            max_rows=max_rows,
+            embedding_model_name=self._embedding_generator,
+            project_name=self._project_name,
+            s3_bucket=embeddings_output_s3_bucket_uri,
+        )  # TODO: make this high-level thing, and make it work with ImageBind for Audio.
+
+        processor.process()  # TODO: we probably want to take csv_path, column_to_embed, id_column_name, max_rows here?
 
     @staticmethod
     def delete(project_name: str):
