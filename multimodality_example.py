@@ -19,26 +19,54 @@ df = pd.DataFrame(
 
 print(df)
 
+# Download data -- can be abstracted
+
+audio_file_handlers = [S3File(row["audios"]) for index, row in df.iterrows()]
+audio_paths = [
+    file_handler.download() for file_handler in audio_file_handlers
+]  # We should parallelise downloading this data!
+
+# Common initialisation -- can be abstracted!
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(device)
+
 # Define the model
-# TODO: should we use fused or unfused models?
-model = ClapModel.from_pretrained("laion/clap-htsat-fused")
-processor = ClapProcessor.from_pretrained("laion/clap-htsat-fused")
 
-# TODO: make this work with peachdb abstractions
-# TODO: run the same with ImageBind?
-# TODO: add CLAP to container
+# ## CLAP
 
-waveforms = None
-for index, row in df.iterrows():
-    with S3File(row["audios"]) as s3_file:
-        waveform, sr = torchaudio.load(s3_file)
-        if waveforms is None:
-            waveforms = waveform
-        else:
-            waveforms = torch.cat((waveforms, waveform), dim=0)
-            print(waveforms.shape)
+# ### Initialisation (also downloads model!)
+# # TODO: should we use fused or unfused models?
+# model = ClapModel.from_pretrained("laion/clap-htsat-fused").eval().to(device)
+# processor = ClapProcessor.from_pretrained("laion/clap-htsat-fused")
 
-        inputs = processor(audios=waveform[0], return_tensors="pt", sampling_rate=sr)
-        audio_embed = model.get_audio_features(**inputs)
+# # TODO: make this work with peachdb abstractions
+# # TODO: add CLAP to container
 
-        print(audio_embed.shape)
+# torch_audios = [torchaudio.load(x) for x in audio_paths]
+# inputs = [processor(audios=aud_2d[0], return_tensors="pt", sampling_rate=sr) for aud_2d, sr in torch_audios]
+# # [x["input_features"].shape for x in inputs]
+# # [x["is_longer"] for x in inputs]
+# input_features = torch.cat([x["input_features"] for x in inputs], dim=0).to(device)
+# is_longer = torch.cat([x["is_longer"] for x in inputs], dim=0).to(device)
+
+# with torch.no_grad():
+#     audio_embed = model.get_audio_features(input_features=input_features, is_longer=is_longer)
+
+# print(audio_embed.cpu().shape)
+
+## ImageBind
+
+### Initialisation (also downloads model!)
+import imagebind.data
+from imagebind.models import imagebind_model
+from imagebind.models.imagebind_model import ModalityType
+
+model = imagebind_model.imagebind_huge(pretrained=True).eval().to(device)
+
+### Inference
+inputs = {ModalityType.AUDIO: imagebind.data.load_and_transform_audio_data(audio_paths, device)}
+
+with torch.no_grad():
+    audio_embed = model(inputs)  # get a dict with [3, 1024] as output.
+
+print(audio_embed[ModalityType.AUDIO].cpu().shape)

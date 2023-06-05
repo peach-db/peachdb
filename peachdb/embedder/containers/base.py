@@ -69,37 +69,42 @@ modal_compute_spec_decorator = lambda stub, image: stub.cls(
     concurrency_limit=500,
 )
 
+# TODO: refactor.
+import numpy as np
+from embedder.models.base import Modality, SingleModalityDataset
+
+
+class SingleModalityRemoteDataset:
+    def __init__(self, modality: Modality, ids: np.ndarray, data: list):
+        self.modality = modality
+        self.ids = ids
+        self.data = data
+
+        if self._is_data_on_s3():
+            self._check_s3_credentials()
+            # TODO: now this download might not get executed on Modal!
+            self._download_data_locally()
+
+    def _is_data_on_s3(self):
+        is_s3_uri_paths = [is_s3_uri(x) for x in self.paths]
+
+        if len(set(is_s3_uri_paths)) != 1:
+            raise ValueError("All paths must be either local or S3 paths.")
+
+        return is_s3_uri_paths[0]
+
+    def _download_data_locally(self):
+        self._remote_file_handlers = [S3File(path) for path in self.data]
+        self._remote_data = self.data
+        self.data = [
+            file_handler.download() for file_handler in self._remote_file_handlers
+        ]  # TODO: We should parallelise downloading this data!
+
 
 class EmbeddingModelBase(ABC):
     @abstractmethod
-    def _calculate_text_embeddings(self, texts: list, show_progress_bar: bool):
+    def _calculate_embeddings(self, dataset: SingleModalityDataset, show_progress_bar: bool):
         pass
-
-    @abstractmethod
-    def _calculate_audio_embeddings(self, audio_paths: list, show_progress_bar: bool):
-        pass
-
-    @abstractmethod
-    def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool):
-        pass
-
-    @abstractmethod
-    @staticmethod
-    @property
-    def _can_take_text_input():
-        raise NotImplementedError
-
-    @abstractmethod
-    @staticmethod
-    @property
-    def _can_take_audio_input():
-        raise NotImplementedError
-
-    @abstractmethod
-    @staticmethod
-    @property
-    def _can_take_image_input():
-        raise NotImplementedError
 
     def _check_s3_credentials(self):
         try:
@@ -109,29 +114,40 @@ class EmbeddingModelBase(ABC):
                 "AWS CLI not configured. Please set credentials locally using `aws configure` and try again."
             )
 
+    @abstractmethod
+    def _calculate_embeddings(self, datasets: list[SingleModalityDataset], show_progress_bar: bool):
+        pass
+
     def calculate_embeddings(
         self,
-        ids: list,
+        datasets: list[SingleModalityRemoteDataset],
         output_path: str,
-        texts: Optional[list] = None,
-        audio_paths: Optional[list] = None,
-        image_paths: Optional[list] = None,
         show_progress_bar: bool = False,
     ):
-        assert (
-            texts is not None or audio_paths is not None or image_paths is not None
-        ), "Must provide at least one input."
-
-        if (
-            is_s3_uri(output_path)
-            # TODO: refactor
-            or (any([is_s3_uri(audio_path) for audio_path in audio_paths]) if audio_paths is not None else False)
-            or (any([is_s3_uri(image_path) for image_path in image_paths]) if image_paths is not None else False)
-        ):
+        if is_s3_uri(output_path):
             self._check_s3_credentials()
 
         embeddings_dict = {}
-        embeddings_dict["ids"] = ids
+        # TODO: add ids back in.
+        # embeddings_dict["ids"] = ids
+
+        local_datasets = [dataset.get_local_dataset() for dataset in datasets]
+        embeddings_dict.update(self._calculate_embeddings(local_datasets, show_progress_bar))
+
+        tmp_output_path = "/root/embeddings.parquet"
+
+        df = pd.DataFrame(embeddings_dict)
+        table = pa.Table.from_pandas(df)
+        pq.write_table(table, tmp_output_path)
+
+        if is_s3_uri(output_path):
+            os.system(f"aws s3 cp {tmp_output_path} {output_path}")
+            return
+
+        return table
+
+
+"""
 
         if texts is not None:
             if self._can_take_text_input:
@@ -153,10 +169,7 @@ class EmbeddingModelBase(ABC):
                 is_s3 = all([is_s3_uri(x) for x in audio_paths])
 
                 if is_s3:
-                    audio_file_handlers = [S3File(path) for path in audio_paths]
-                    local_audio_paths = [
-                        file_handler.download() for file_handler in audio_file_handlers
-                    ]  # TODO: We should parallelise downloading this data!
+                    
                 else:
                     local_audio_paths = audio_paths
 
@@ -186,14 +199,5 @@ class EmbeddingModelBase(ABC):
             else:
                 raise Exception("This model cannot take image input.")
 
-        tmp_output_path = "/root/embeddings.parquet"
 
-        df = pd.DataFrame(embeddings_dict)
-        table = pa.Table.from_pandas(df)
-        pq.write_table(table, tmp_output_path)
-
-        if is_s3_uri(output_path):
-            os.system(f"aws s3 cp {tmp_output_path} {output_path}")
-            return
-
-        return table
+"""

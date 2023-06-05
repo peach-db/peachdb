@@ -3,6 +3,7 @@ from typing import Optional
 import modal
 
 from peachdb.embedder.containers.base import EmbeddingModelBase, base_container_image, modal_compute_spec_decorator
+from peachdb.embedder.models.base import SingleModalityDataset
 from peachdb.embedder.models.multimodal_imagebind import ImageBindModel
 from peachdb.embedder.utils import S3File, is_s3_uri
 
@@ -23,31 +24,13 @@ class ImageBindEmbdedder(EmbeddingModelBase):
     def __enter__(self):
         self.model = ImageBindModel()
 
-    def _calculate_text_embeddings(self, texts, show_progress_bar: bool):
-        return self.model.encode_text(texts, IMAGEBIND_BATCH_SIZE, show_progress_bar)
+    def _calculate_embeddings(self, datasets: list[SingleModalityDataset], show_progress_bar: bool):
+        return self.model.encode_multiple_modalities(
+            datasets=datasets, batch_size=IMAGEBIND_BATCH_SIZE, show_progress_bar=show_progress_bar
+        )
 
-    def _calculate_audio_embeddings(self, audio_paths, show_progress_bar: bool):
-        # TODO: do we want IMAGEBIND_BATCH_SIZE for audio same as for text?
-        return self.model.encode_audio(audio_paths, IMAGEBIND_BATCH_SIZE, show_progress_bar)
-
-    @staticmethod
-    @property
-    def _can_take_text_input():
-        return True
-
-    @staticmethod
-    @property
-    def _can_take_audio_input():
-        return True
-
-    @staticmethod
-    @property
-    def _can_take_image_input():
-        # return True - once implemented!
-        raise NotImplementedError
-
-    # We need to rewrite this function in all the inherited class so we can use the @modal method decorator.
-    # TODO: check if above statement is true / if we can factor this out.
+    # TODO: We need to rewrite this function in all the inherited class so we can use the @modal method decorator.
+    # check if above statement is true / if we can factor this out.
     @modal.method()
     def calculate_embeddings(
         self,

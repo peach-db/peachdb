@@ -22,36 +22,6 @@ class SentenceTransformerEmbedder(EmbeddingModelBase):
     def __enter__(self):
         self.model = SentenceTransformerModel()
 
-    def _calculate_text_embeddings(self, texts, show_progress_bar: bool):
-        return self.model.encode(
-            texts,
-            batch_size=SENTENCE_TRANSFORMER_BATCH_SIZE,
-            show_progress_bar=show_progress_bar,
-        )
-
-    # TODO: are defining these functions necessary?
-    def _calculate_audio_embeddings(self, audio_paths, show_progress_bar: bool):
-        raise NotImplementedError
-
-    def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool):
-        raise NotImplementedError
-
-    @staticmethod
-    @property
-    def _can_take_text_input():
-        return True
-
-    @staticmethod
-    @property
-    def _can_take_audio_input():
-        return False
-
-    @staticmethod
-    @property
-    def _can_take_image_input():
-        # return True - once implemented!
-        return False
-
     # We need to rewrite this function in all the inherited class so we can use the @modal method decorator.
     # TODO: check if above statement is true / if we can factor this out.
     @modal.method()
