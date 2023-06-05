@@ -2,7 +2,7 @@ from typing import Optional, Union
 
 import modal
 import numpy as np
-import pyarrow as pa
+import pyarrow as pa  # type: ignore
 
 from peachdb.embedder.containers.base import EmbeddingModelBase, base_container_image, modal_compute_spec_decorator
 from peachdb.embedder.models.multimodal_imagebind import ImageBindModel

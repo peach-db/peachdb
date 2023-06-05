@@ -2,19 +2,22 @@
 PeachDB Library
 """
 import abc
-import asyncio
+
+# import asyncio
 import os
 import shelve
 import shutil
-from pathlib import Path
+
+# from pathlib import Path
 from typing import List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from pyngrok import ngrok
+from pyngrok import ngrok  # type: ignore
 from rich import print
 from rich.prompt import Prompt
 
@@ -119,7 +122,7 @@ class PeachDB(_Base):
         except KeyboardInterrupt:
             self._db.cleanup()
 
-    def query(self, text: str, top_k: int = 5) -> Tuple[list, list, pd.DataFrame]:
+    def query(self, text: str, top_k: int = 5) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
         assert text
         ids, distances = self._db.process_query(text, top_k)
         metadata = self._db.fetch_metadata(ids)

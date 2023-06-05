@@ -7,7 +7,7 @@ import uuid
 from functools import cache, wraps
 from typing import Optional
 
-import tqdm
+import tqdm  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class S3Files(S3Entity):
     def __init__(self, s3_paths: list[str]):
         _verify_aws_cli_installed()
         self.s3_paths = s3_paths
-        self.temp_resources = None
+        self.temp_resources: Optional[list[tempfile.NamedTemporaryFile]] = None
 
     @handle_s3_download_error
     def copy_file(self, path, resource_name) -> None:

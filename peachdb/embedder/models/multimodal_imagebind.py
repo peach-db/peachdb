@@ -1,9 +1,13 @@
 import numpy as np
 import torch
-import tqdm
-from imagebind.data import load_and_transform_audio_data, load_and_transform_text, load_and_transform_vision_data
-from imagebind.models import imagebind_model
-from imagebind.models.imagebind_model import ModalityType
+import tqdm  # type: ignore
+from imagebind.data import (  # type: ignore
+    load_and_transform_audio_data,
+    load_and_transform_text,
+    load_and_transform_vision_data,
+)
+from imagebind.models import imagebind_model  # type: ignore
+from imagebind.models.imagebind_model import ModalityType  # type: ignore
 
 from peachdb.embedder.models.base import BaseModel
 

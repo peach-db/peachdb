@@ -1,6 +1,6 @@
 from typing import Tuple
 
-import hnswlib
+import hnswlib  # type: ignore
 import numpy as np
 from rich import print
 

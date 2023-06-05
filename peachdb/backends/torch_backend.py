@@ -65,7 +65,7 @@ class TorchBackend(BackendBase):
         self.device = torch.device("cuda")
         self._embeddings = torch.from_numpy(self._embeddings).to(self.device)  # Ensure the tensor is on the GPU
 
-    def _process_query(self, query_embedding, top_k: int = 5):
+    def _process_query(self, query_embedding, top_k: int = 5) -> tuple:
         """Compute query embedding, calculate distance of query embedding and get top k."""
         query_embedding = torch.from_numpy(query_embedding).to(self.device)
 
@@ -82,8 +82,8 @@ class TorchBackend(BackendBase):
 
 
 if __name__ == "__main__":
-    import scipy.spatial.distance as scipy_distance
-    from sentence_transformers.util import cos_sim as st_cos_sim
+    import scipy.spatial.distance as scipy_distance  # type: ignore
+    from sentence_transformers.util import cos_sim as st_cos_sim  # type: ignore
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

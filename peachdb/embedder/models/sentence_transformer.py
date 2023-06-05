@@ -1,5 +1,5 @@
 import torch
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer  # type: ignore
 
 from peachdb.embedder.models.base import BaseModel
 

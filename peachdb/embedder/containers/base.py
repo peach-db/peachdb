@@ -4,12 +4,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Union
 
-import boto3
+import boto3  # type: ignore
 import modal
 import numpy as np
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
+import pyarrow as pa  # type: ignore
+import pyarrow.parquet as pq  # type: ignore
 import requests
 
 from peachdb.constants import CACHED_REQUIREMENTS_TXT, GIT_REQUIREMENTS_TXT
@@ -18,7 +18,7 @@ from peachdb.embedder.utils import S3File, S3Files, is_s3_uri
 # Logic to get a requirements.txt file for the base image when package is on PyPI.
 dev_requirements_path = Path(__file__).parents[3] / "requirements.txt"
 if os.path.exists(dev_requirements_path):
-    requirements_path = dev_requirements_path
+    requirements_path: Union[Path, str] = dev_requirements_path
 else:
     response = requests.get(GIT_REQUIREMENTS_TXT)
 
@@ -57,7 +57,7 @@ base_container_image = (
         "./aws/install",
         "rm -rf awscliv2.zip aws",
     )
-    .pip_install_from_requirements(requirements_path)
+    .pip_install_from_requirements(str(requirements_path))
     # Container creation flow from inside a pypi package doesn't pick up it's own files.
     .pip_install("git+https://github.com/peach-db/peachdb")
 )
@@ -199,6 +199,6 @@ class EmbeddingModelBase(ABC):
 
         if is_s3_uri(output_path):
             os.system(f"aws s3 cp {tmp_output_path} {output_path}")
-            return
+            return None
 
         return table

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from rich import print
 
+import peachdb.embedder.models.base
 from peachdb.embedder.models.multimodal_imagebind import ImageBindModel
 from peachdb.embedder.models.sentence_transformer import SentenceTransformerModel
 from peachdb.embedder.utils import S3File, S3Folder, is_s3_uri
@@ -29,7 +30,7 @@ class BackendBase(abc.ABC):
             raise ValueError("Duplicate ids found in the embeddings file.")
 
         if embedding_generator == "sentence_transformer_L12":
-            self._encoder = SentenceTransformerModel()
+            self._encoder: peachdb.embedder.models.base.BaseModel = SentenceTransformerModel()
         elif embedding_generator == "imagebind":
             self._encoder = ImageBindModel()
         else:

@@ -2,12 +2,13 @@ import asyncio
 import os
 import shutil
 from collections import namedtuple
-from typing import List, Optional
+from typing import List, Optional, Type
 
 import duckdb
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # type: ignore
 from rich import print
 
+import peachdb.embedder.containers.base
 from peachdb.constants import BLOB_STORE
 from peachdb.embedder.utils import S3File, is_s3_uri
 
@@ -37,7 +38,9 @@ class EmbeddingProcessor:
         if self._embedding_model_name == "sentence_transformer_L12":
             from peachdb.embedder.containers.sentence_transformer import SentenceTransformerEmbedder, sbert_stub
 
-            self._embedding_model = SentenceTransformerEmbedder
+            self._embedding_model: Type[
+                peachdb.embedder.containers.base.EmbeddingModelBase
+            ] = SentenceTransformerEmbedder
             self._embedding_model_stub = sbert_stub
             self._embedding_model_chunk_size = 10000
         elif self._embedding_model_name == "imagebind":
@@ -124,7 +127,7 @@ class EmbeddingProcessor:
                 )
                 for idx, chunk in enumerate(chunks)
             ]
-            results = list(st.calculate_embeddings.starmap(input_tuples))
+            results = list(st.calculate_embeddings.starmap(input_tuples))  # type: ignore
 
             if not is_s3_uri(self._csv_path):
                 for idx, result in enumerate(results):
