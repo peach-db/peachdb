@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import uuid
 from functools import cache, wraps
-from typing import Optional
+from typing import Optional, Type
 
 import tqdm  # type: ignore
 
@@ -39,7 +39,7 @@ class S3Entity(metaclass=abc.ABCMeta):
     def __init__(self, s3_path: str):
         _verify_aws_cli_installed()
         self.s3_path = s3_path
-        self.temp_resource: Optional[tempfile.NamedTemporaryFile | tempfile.TemporaryDirectory] = None
+        self.temp_resource: Optional[Type[tempfile.NamedTemporaryFile] | Type[tempfile.TemporaryDirectory]] = None
 
     @abc.abstractmethod
     def download(self):
@@ -74,7 +74,7 @@ class S3Files(S3Entity):
     def __init__(self, s3_paths: list[str]):
         _verify_aws_cli_installed()
         self.s3_paths = s3_paths
-        self.temp_resources: Optional[list[tempfile.NamedTemporaryFile]] = None
+        self.temp_resources: Optional[list[Type[tempfile.NamedTemporaryFile]]] = None
 
     @handle_s3_download_error
     def copy_file(self, path, resource_name) -> None:
