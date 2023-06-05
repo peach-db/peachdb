@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import tqdm
-from imagebind.data import load_and_transform_audio_data, load_and_transform_text
+from imagebind.data import load_and_transform_audio_data, load_and_transform_text, load_and_transform_vision_data
 from imagebind.models import imagebind_model
 from imagebind.models.imagebind_model import ModalityType
 
@@ -18,7 +18,7 @@ class ImageBindModel(BaseModel):
     # Otherwise we are wasting compute. Refactor given this.
     # HAVE A SINGLE ENCODE FUNCTION!
 
-    def encode_text(self, texts, batch_size, show_progress_bar):
+    def encode_texts(self, texts, batch_size, show_progress_bar) -> np.ndarray:
         embeddings = []
         for start_index in tqdm.tqdm(range(0, len(texts), batch_size), desc="Batches", disable=not show_progress_bar):
             texts_batch = texts[start_index : start_index + batch_size]
@@ -29,18 +29,31 @@ class ImageBindModel(BaseModel):
 
         return np.concatenate(embeddings, axis=0)
 
-    def encode_audio(self, local_paths, batch_size, show_progress_bar):
-        # TODO: add batching & progress bar
+    def encode_audio(self, local_paths, batch_size, show_progress_bar) -> np.ndarray:
+        embeddings = []
+        for start_index in tqdm.tqdm(
+            range(0, len(local_paths), batch_size), desc="Batches", disable=not show_progress_bar
+        ):
+            batch_local_paths = local_paths[start_index : start_index + batch_size]
+            batched_inputs = {ModalityType.AUDIO: load_and_transform_audio_data(batch_local_paths, self.device)}
 
-        inputs = {ModalityType.AUDIO: load_and_transform_audio_data(local_paths, self.device)}
+            with torch.no_grad():
+                embeddings.append(self.model(batched_inputs)[ModalityType.AUDIO].cpu().numpy())
 
-        with torch.no_grad():
-            audio_embed = self.model(inputs)[ModalityType.AUDIO].cpu().numpy()
+        return np.concatenate(embeddings, axis=0)
 
-        return audio_embed
+    def encode_image(self, local_paths, batch_size, show_progress_bar) -> np.ndarray:
+        embeddings = []
+        for start_index in tqdm.tqdm(
+            range(0, len(local_paths), batch_size), desc="Batches", disable=not show_progress_bar
+        ):
+            batch_local_paths = local_paths[start_index : start_index + batch_size]
+            batched_inputs = {ModalityType.VISION: load_and_transform_vision_data(batch_local_paths, self.device)}
 
-    def encode_image(self, local_paths, batch_size, show_progress_bar):
-        raise NotImplementedError
+            with torch.no_grad():
+                embeddings.append(self.model(batched_inputs)[ModalityType.VISION].cpu().numpy())
+
+        return np.concatenate(embeddings, axis=0)
 
     @staticmethod
     def download_model():

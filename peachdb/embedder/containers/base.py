@@ -2,17 +2,18 @@ import os
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import boto3
 import modal
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import requests
 
 from peachdb.constants import CACHED_REQUIREMENTS_TXT, GIT_REQUIREMENTS_TXT
-from peachdb.embedder.utils import S3File, is_s3_uri
+from peachdb.embedder.utils import S3File, S3Files, is_s3_uri
 
 # Logic to get a requirements.txt file for the base image when package is on PyPI.
 dev_requirements_path = Path(__file__).parents[3] / "requirements.txt"
@@ -72,33 +73,33 @@ modal_compute_spec_decorator = lambda stub, image: stub.cls(
 
 class EmbeddingModelBase(ABC):
     @abstractmethod
-    def _calculate_text_embeddings(self, texts: list, show_progress_bar: bool):
+    def _calculate_text_embeddings(self, texts: list, show_progress_bar: bool) -> np.ndarray:
         pass
 
     @abstractmethod
-    def _calculate_audio_embeddings(self, audio_paths: list, show_progress_bar: bool):
+    def _calculate_audio_embeddings(self, audio_paths: list, show_progress_bar: bool) -> np.ndarray:
         pass
 
     @abstractmethod
-    def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool):
+    def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool) -> np.ndarray:
         pass
 
-    @abstractmethod
     @staticmethod
     @property
-    def _can_take_text_input():
+    @abstractmethod
+    def _can_take_text_input() -> bool:
         raise NotImplementedError
 
-    @abstractmethod
     @staticmethod
     @property
-    def _can_take_audio_input():
+    @abstractmethod
+    def _can_take_audio_input() -> bool:
         raise NotImplementedError
 
-    @abstractmethod
     @staticmethod
     @property
-    def _can_take_image_input():
+    @abstractmethod
+    def _can_take_image_input() -> bool:
         raise NotImplementedError
 
     def _check_s3_credentials(self):
@@ -117,7 +118,7 @@ class EmbeddingModelBase(ABC):
         audio_paths: Optional[list] = None,
         image_paths: Optional[list] = None,
         show_progress_bar: bool = False,
-    ):
+    ) -> Union[None, pa.Table]:
         assert (
             texts is not None or audio_paths is not None or image_paths is not None
         ), "Must provide at least one input."
@@ -134,6 +135,7 @@ class EmbeddingModelBase(ABC):
         embeddings_dict["ids"] = ids
 
         if texts is not None:
+            print("Processing text input...")
             if self._can_take_text_input:
                 text_embeddings = self._calculate_text_embeddings(texts, show_progress_bar)
                 # TODO: update wherever this variable is used upstream
@@ -145,6 +147,7 @@ class EmbeddingModelBase(ABC):
         # TODO: think about if we want to error if a modality is not supported by a model, or just
         # error, and then let things continue.
         if audio_paths is not None:
+            print("Processing audio input...")
             if self._can_take_audio_input:
                 assert (
                     len(set([is_s3_uri(x) for x in audio_paths])) == 1
@@ -153,10 +156,11 @@ class EmbeddingModelBase(ABC):
                 is_s3 = all([is_s3_uri(x) for x in audio_paths])
 
                 if is_s3:
-                    audio_file_handlers = [S3File(path) for path in audio_paths]
-                    local_audio_paths = [
-                        file_handler.download() for file_handler in audio_file_handlers
-                    ]  # TODO: We should parallelise downloading this data!
+                    print("Downloading audio files from S3... Creating handlers...")
+                    audio_files_handler = S3Files(audio_paths)
+
+                    print("Handlers created, downloading...")
+                    local_audio_paths = audio_files_handler.download()
                 else:
                     local_audio_paths = audio_paths
 
@@ -174,10 +178,11 @@ class EmbeddingModelBase(ABC):
                 is_s3 = all([is_s3_uri(x) for x in image_paths])
 
                 if is_s3:
-                    image_file_handlers = [S3File(path) for path in image_paths]
-                    local_image_paths = [
-                        file_handler.download() for file_handler in image_file_handlers
-                    ]  # TODO: We should parallelise downloading this data!
+                    print("Downloading audio files from S3... Creating handlers...")
+                    image_file_handlers = S3Files(image_paths)
+
+                    print("Handlers created, downloading...")
+                    local_image_paths = image_file_handlers.download()
                 else:
                     local_image_paths = image_paths
 
