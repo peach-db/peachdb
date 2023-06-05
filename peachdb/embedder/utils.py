@@ -5,11 +5,14 @@ import subprocess
 import tempfile
 import uuid
 from functools import cache, wraps
+from types import SimpleNamespace
 from typing import Optional, Type
 
 import tqdm  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+Modality = SimpleNamespace(TEXT="text", AUDIO="audio", IMAGE="image")
 
 
 def handle_s3_download_error(func):

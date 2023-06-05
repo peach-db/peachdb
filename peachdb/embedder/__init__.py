@@ -10,7 +10,7 @@ from rich import print
 
 import peachdb.embedder.containers.base
 from peachdb.constants import BLOB_STORE
-from peachdb.embedder.utils import S3File, is_s3_uri
+from peachdb.embedder.utils import Modality, S3File, is_s3_uri
 
 Chunk = namedtuple("Chunk", ["texts", "ids"])
 
@@ -24,6 +24,7 @@ class EmbeddingProcessor:
         id_column_name: str,
         embedding_model_name: str,
         project_name: str,
+        modality: Type[Modality],
         s3_bucket: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
@@ -34,6 +35,7 @@ class EmbeddingProcessor:
         self._max_rows = max_rows
         self._project_name = project_name
         self._s3_bucket = s3_bucket.strip("/") + "/" if s3_bucket else None
+        self._modality = modality
 
         if self._embedding_model_name == "sentence_transformer_L12":
             from peachdb.embedder.containers.sentence_transformer import SentenceTransformerEmbedder, sbert_stub
@@ -103,7 +105,7 @@ class EmbeddingProcessor:
         inputs = []
 
         for chunk in chunked_data:
-            texts = []
+            texts = []  # TODO: replace by better name as audio/image paths here work too.
             ids = []
             for text, id in chunk:
                 texts.append(text)
@@ -118,11 +120,13 @@ class EmbeddingProcessor:
 
             fname = self._csv_path.split("/")[-1].split(".")[0]
             input_tuples = [
-                # expected: (texts, ids, output_path, show_progress)
+                # expected: (ids, output_path, texts, audio_paths, image_paths, show_progress)
                 (
-                    chunk.texts,
                     chunk.ids,
                     f"{self.embeddings_output_dir}/{fname}_{idx}_{self._embedding_model_name}.parquet",
+                    chunk.texts if self._modality == Modality.TEXT else None,
+                    chunk.texts if self._modality == Modality.AUDIO else None,
+                    None,
                     True,
                 )
                 for idx, chunk in enumerate(chunks)

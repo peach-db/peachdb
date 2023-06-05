@@ -24,7 +24,7 @@ from rich.prompt import Prompt
 from peachdb.backends import get_backend
 from peachdb.constants import BLOB_STORE, SHELVE_DB
 from peachdb.embedder import EmbeddingProcessor
-from peachdb.embedder.utils import is_s3_uri
+from peachdb.embedder.utils import Modality, is_s3_uri
 
 
 class QueryResponse(BaseModel):
@@ -36,10 +36,6 @@ class QueryResponse(BaseModel):
 class _Base(abc.ABC):
     @abc.abstractmethod
     def query(self, text: str, top_k: int = 5):
-        pass
-
-    @abc.abstractmethod
-    def upsert(self, text: str):
         pass
 
 
@@ -56,46 +52,29 @@ class PeachDB(_Base):
         PeachDB._validate_embedding_backend(embedding_backend)
         super().__init__()
         self._project_name = project_name
-        self._embeddings_dir = None
-        self._metadata_path = None
         self._embedding_generator = embedding_generator
+        self._distance_metric = distance_metric
+        self._embedding_backend = embedding_backend
 
         with shelve.open(SHELVE_DB) as shelve_db:
             if self._project_name in shelve_db.keys():
-                self._embeddings_dir = shelve_db[self._project_name]["embeddings_dir"]
-                self._metadata_path = shelve_db[self._project_name]["metadata_path"]
-                self._id_column_name = shelve_db[self._project_name]["id_column_name"]
-            else:
-                # create new shelve_db entry and log to user.
-                raise ValueError(
-                    f"Project name: {project_name} not found. Creating an empty PeachDB is not supported yet, please use PeachDB.create"
+                shelve_db[project_name]["query_logs"].append(
+                    {"distance_metric": distance_metric, "embedding_backend": embedding_backend}
                 )
-                # TODO: fix!
-                with shelve.open(SHELVE_DB) as db:
-                    db[project_name] = {
-                        "metadata_path": csv_path,
-                        "column_to_embed": column_to_embed,
-                        "id_column_name": id_column_name,
-                        "max_rows": max_rows,
-                        "embedding_generator": embedding_generator,
-                        "distance_metric": distance_metric,
-                        "embedding_backend": embedding_backend,
-                        "embeddings_dir": processor.embeddings_output_dir,
-                        "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
-                    }
+            else:
+                shelve_db[project_name] = {
+                    "embedding_generator": embedding_generator,
+                    "query_logs": [{"distance_metric": distance_metric, "embedding_backend": embedding_backend}],
+                    "upsertion_logs": [],
+                }
                 print(f"[u]PeachDB has been created for project: [bold green]{project_name}[/bold green][/u]")
 
-        # TODO: we probably need to remove this, and handle this somewhere else?
-        self._db = get_backend(
-            embedding_generator=embedding_generator,
-            embedding_backend=embedding_backend,
-            distance_metric=distance_metric,
-            embeddings_dir=self._embeddings_dir,
-            metadata_path=self._metadata_path,
-            id_column_name=self._id_column_name,
-        )
+        self._db = None
 
     def deploy(self):
+        if self._db is None:
+            self._get_db_backend()
+
         app = FastAPI()
         app.add_middleware(
             CORSMiddleware,
@@ -124,12 +103,32 @@ class PeachDB(_Base):
 
     def query(self, text: str, top_k: int = 5) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
         assert text
+
+        if self._db is None:
+            self._get_db_backend()
+
         ids, distances = self._db.process_query(text, top_k)
         metadata = self._db.fetch_metadata(ids)
         return ids, distances, metadata
 
-    def upsert(self, text: str):
-        raise NotImplementedError
+    def _get_db_backend(self):
+        # TODO: our embeddings now have "embeddings_text", "embeddings_audio", "embeddings_image". Adjust for this.
+        with shelve.open(SHELVE_DB) as shelve_db:
+            assert (
+                len(shelve_db[self._project_name]["upsertion_logs"]) == 1
+            ), "Only one upsertion per project is supported at this time."
+
+            # TODO: ensure that the info lives here as expected!
+            last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
+
+        self._db = get_backend(
+            embedding_generator=self._embedding_generator,
+            embedding_backend=self._embedding_backend,
+            distance_metric=self._distance_metric,
+            embeddings_dir=last_upsertion["embeddings_dir"],
+            metadata_path=last_upsertion["metadata_path"],
+            id_column_name=last_upsertion["id_column_name"],
+        )
 
     def upsert_text(
         self,
@@ -156,9 +155,23 @@ class PeachDB(_Base):
             embedding_model_name=self._embedding_generator,
             project_name=self._project_name,
             s3_bucket=embeddings_output_s3_bucket_uri,
+            modality=Modality.TEXT,
         )
 
         processor.process()
+
+        with shelve.open(SHELVE_DB) as shelve_db:
+            shelve_db[self._project_name]["upsertion_logs"].append(
+                {
+                    "embeddings_dir": processor.embeddings_output_dir,
+                    "metadata_path": csv_path,
+                    "column_to_embed": column_to_embed,
+                    "id_column_name": id_column_name,
+                    "max_rows": max_rows,
+                    "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
+                    "modality": str(Modality.TEXT),
+                }
+            )
 
     def upsert_audio(
         self,
@@ -185,9 +198,23 @@ class PeachDB(_Base):
             embedding_model_name=self._embedding_generator,
             project_name=self._project_name,
             s3_bucket=embeddings_output_s3_bucket_uri,
-        )  # TODO: make this high-level thing, and make it work with ImageBind for Audio.
+            modality=Modality.AUDIO,
+        )
 
-        processor.process()  # TODO: we probably want to take csv_path, column_to_embed, id_column_name, max_rows here?
+        processor.process()
+
+        with shelve.open(SHELVE_DB) as shelve_db:
+            shelve_db[self._project_name]["upsertion_logs"].append(
+                {
+                    "embeddings_dir": processor.embeddings_output_dir,
+                    "metadata_path": csv_path,
+                    "column_to_embed": column_to_embed,
+                    "id_column_name": id_column_name,
+                    "max_rows": max_rows,
+                    "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
+                    "modality": str(Modality.TEXT),
+                }
+            )
 
     @staticmethod
     def delete(project_name: str):
