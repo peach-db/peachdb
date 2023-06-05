@@ -205,3 +205,4 @@ tests/backends/tune_hnsw_backend.py
 tests/create_test_csv.py
 .vscode/settings.json
 temp_draft.py
+multimodality_example.py
