@@ -23,7 +23,7 @@ class SentenceTransformerEmbedder(EmbeddingModelBase):
         self.model = SentenceTransformerModel()
 
     def _calculate_text_embeddings(self, texts, show_progress_bar: bool):
-        return self.model.encode(
+        return self.model.encode_texts(
             texts,
             batch_size=SENTENCE_TRANSFORMER_BATCH_SIZE,
             show_progress_bar=show_progress_bar,
