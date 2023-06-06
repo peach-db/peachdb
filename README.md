@@ -5,32 +5,37 @@
 
 <br/>
 
-**Our core API has 3 functions**
+**Our core API has 4 functions**
 
 ```python
 from peachdb import PeachDB
 
-# Create a new PeachDB instance
-# Embeddings are automatically computed at scale using the selected `embedding_generator` model on Modal.
-db = PeachDB.create(
+# Create a new PeachDB instance or reference an existing one
+db = PeachDB(
     project_name="my_app",
-    csv_path="/path/to/local/csv",  # or "s3://path/to/csv"
-    column_to_embed="foo",
-    id_column_name="id",
-    max_rows=None, # or N, to process N rows of the dataset 
-    distance_metric="cosine",  # or "l2"
-    embedding_backend="exact_cpu",  # or "exact_gpu" or "approx"
-    embedding_generator="sentence_transformer_L12",
-    embeddings_output_s3_bucket_uri=None, # required when using S3 URI for `csv_path`
+    embedding_generator="imagebind",  # "imagebind" or "sentence_transformer_L12"
+    embedding_backend="exact_cpu",  # "exact_cpu", "exact_gpu", or "approx"
+    distance_metric="cosine",  # "cosine" or "l2"
 )
-# Once the database has been successfully setup, you can reference it in the future via
-# db = PeachDB(project_name="my_app")
 
-# Query/search 5 most similar results
-results_df = db.query(text='An example query', top_k=5)
+# Auto-compute & upsert embeddings at scale using the specified `embedding_generator` model on Modal
+db.upsert_text(  # or "upsert_image" or "upsert_audio"
+    csv_path="/path/to/local/csv",  # or "s3://path/to/csv"
+    column_to_embed="foo",  # column values can either be string or public URI to image/audio
+    id_column_name="id",
+    embeddings_output_s3_bucket_uri=None,  # required when using S3 URI for `csv_path`
+    max_rows=None,  # or N to process N rows
+)
 
-# Deploy the database as a publicly available FastAPI server
-# Call GET /query?text='An example query'&top_k=5 to fetch 5 most similar results
+# Query top 5 similar results
+ids, distances, results_df = db.query(
+    query_input='An example query',  # or path to an image/audio file
+    modality='text',  # "text", "image", or "audio"
+    top_k=5
+)
+
+# Deploy database as a publicly accessible FastAPI server
+# GET /query?query_input='An example query'&modality=[text|image|audio]&top_k=5 to fetch 5 most similar results
 db.deploy()
 ```
 
@@ -40,9 +45,12 @@ We've streamlined the entire end-to-end process of creating, storing, and retrie
 Our key features include:
 * **Automated, cost-effective & large-scale embedding computation**: We leverage serverless GPU functions (through [Modal](https://modal.com/)) to compute embeddings on a large scale efficiently and affordably.
     - For instance, we processed the [Kaggle 5M song lyrics dataset](https://www.kaggle.com/datasets/nikhilnayak123/5-million-song-lyrics-dataset?resource=download&select=ds2.csv) in just *12 minutes at a cost of $4.90*, using sentence transformers!
-    - We've developed a Modal wrapper for [Sentence Transformer L12](https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2).
-        - *Coming soon*: Modal wrappers for open-source embedding models such as [ImageBind](https://github.com/facebookresearch/ImageBind), [OpenCLIP](https://github.com/mlfoundations/open_clip), and more.
-        - *Coming soon*: Support for multi-threaded [OpenAI](https://platform.openai.com/docs/guides/embeddings) embedding calculation.
+    - We've developed Modal wrappers for:
+        - [Sentence Transformer L12](https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2)
+        - [ImageBind](https://github.com/facebookresearch/ImageBind),
+        - *Coming soon*, support for:
+            - Open-source embedding models such as [OpenCLIP](https://github.com/mlfoundations/open_clip), [Microsoft E5-v2](https://arxiv.org/pdf/2212.03533.pdf), and more.
+            - Multi-threaded [OpenAI](https://platform.openai.com/docs/guides/embeddings) embedding calculation.
     - *Coming soon*: Bring your own embeddings.
     - *Coming soon*: Custom embedding functions for even more flexibility.
 * **Multimodality**: Native support for data with mixture of modalities (such as image/audio/video).
@@ -77,31 +85,30 @@ Below is a walkthrough of creating a web server for a music recommendation app. 
     from peachdb import PeachDB
 
     import os
-    # Fetch the username & key by creating a new API token at https://www.kaggle.com/settings
-    os.environ['KAGGLE_USERNAME'] = None # set user name
-    os.environ['KAGGLE_KEY'] = None # set key
 
-    import kaggle # make sure you've run `pip install kaggle`
+    # Fetch the username & key by creating a new API token at https://www.kaggle.com/settings
+    os.environ["KAGGLE_USERNAME"] = None  # set user name
+    os.environ["KAGGLE_KEY"] = None  # set key
+
+    import kaggle  # make sure you've run `pip install kaggle`
 
     kaggle.api.authenticate()
-    kaggle.api.dataset_download_files(
-        'nikhilnayak123/5-million-song-lyrics-dataset',
-        path='.',
-        unzip=True
-    )
+    # It can take a few mins to download depending on the network speed
+    kaggle.api.dataset_download_files("nikhilnayak123/5-million-song-lyrics-dataset", path=".", unzip=True)
 
-    db = PeachDB.create(
+    db = PeachDB(
         project_name="spoti_vibe",
-        csv_path='./ds2.csv',  # dataset name as observed on Kaggle
-        column_to_embed="lyrics",
-        id_column_name="id",
-        max_rows=None,
         distance_metric="cosine",
         embedding_backend="exact_cpu",
         embedding_generator="sentence_transformer_L12",
     )
+    db.upsert_text(
+        csv_path="./ds2.csv",  # dataset name as observed on Kaggle
+        column_to_embed="lyrics",
+        id_column_name="id",
+    )
 
-    db.deploy() # Public URL will be printed to console
+    db.deploy()  # Public URL will be printed to console
     ```
 
 And that's it! You should now have a publicly available server that can listen to query requests from the user on: <br/>

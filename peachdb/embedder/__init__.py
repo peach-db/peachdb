@@ -76,6 +76,7 @@ class EmbeddingProcessor:
     def _download_and_read_dataset(self, csv_path: str) -> str:
         """Supports a local/s3 reference to the csv formatted dataset"""
         if not is_s3_uri(self._csv_path):
+            print("[bold]Loading data into memory...[/bold]")
             # local ref has been provided. make a copy within .peachdb for persistence
             project_blob_dir = f"{BLOB_STORE}/{self._project_name}"
             os.makedirs(project_blob_dir, exist_ok=True)

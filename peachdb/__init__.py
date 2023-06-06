@@ -39,7 +39,7 @@ class QueryResponse(BaseModel):
 
 class _Base(abc.ABC):
     @abc.abstractmethod
-    def query(self, query: str, query_modality: Modality, store_modality: Optional[Modality] = None, top_k: int = 5):
+    def query(self, query_input: str, modality: Modality, store_modality: Optional[Modality] = None, top_k: int = 5):
         pass
 
 
@@ -88,27 +88,11 @@ class PeachDB(_Base):
             allow_headers=["*"],
         )
 
-        @app.get("/text", response_model=QueryResponse)
-        async def text_query_handler(text: str, top_k: int = 5):
-            ids, distances, metadata = self.query(text, query_modality="text", top_k=top_k)
-            return {
-                "ids": ids.tolist(),
-                "distances": distances.tolist(),
-                "metadata": metadata.to_dict(orient="records"),
-            }
-
-        @app.get("/audio", response_model=QueryResponse)
-        async def audio_query_handler(audiopath: str, top_k: int = 5):
-            ids, distances, metadata = self.query(audiopath, query_modality="audio", top_k=top_k)
-            return {
-                "ids": ids.tolist(),
-                "distances": distances.tolist(),
-                "metadata": metadata.to_dict(orient="records"),
-            }
-
-        @app.get("/image", response_model=QueryResponse)
-        async def image_query_handler(imagepath: str, top_k: int = 5):
-            ids, distances, metadata = self.query(imagepath, query_modality="image", top_k=top_k)
+        @app.get("/query", response_model=QueryResponse)
+        async def query_handler(query_input: str, modality: str, top_k: int = 5):
+            if isinstance(modality, str):
+                modality = Modality(modality)
+            ids, distances, metadata = self.query(query_input, modality=modality, top_k=top_k)
             return {
                 "ids": ids.tolist(),
                 "distances": distances.tolist(),
@@ -125,42 +109,46 @@ class PeachDB(_Base):
 
     def query(
         self,
-        query: str,
-        query_modality: str | Modality,
+        query_input: str,
+        modality: str | Modality,
         store_modality: Optional[Modality] = None,
         top_k: int = 5,
     ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-        assert query and query_modality
-        if isinstance(query_modality, str):
-            query_modality = Modality(query_modality)
+        assert query_input and modality
+        if isinstance(modality, str):
+            modality = Modality(modality)
 
         if self._db is None:
-            with shelve.open(SHELVE_DB) as shelve_db:
-                if len(shelve_db[self._project_name]["upsertion_logs"]) < 1:
-                    raise ValueError("No embeddings! Please upsert data before running your query")
+            self._db = self._get_db_backend()
 
-                # TODO: ensure that the info lives here as expected!
-                last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
-
-            embeddings_dir = last_upsertion["embeddings_dir"]
-            metadata_path = last_upsertion["metadata_path"]
-            id_column_name = last_upsertion["id_column_name"]
-            # TODO: fix if we have multiple modalities stored.
-            store_modality = store_modality if store_modality is not None else Modality(last_upsertion["modality"])
-
-            self._db = get_backend(
-                embedding_generator=self._embedding_generator,
-                embedding_backend=self._embedding_backend,
-                distance_metric=self._distance_metric,
-                embeddings_dir=embeddings_dir,
-                metadata_path=metadata_path,
-                id_column_name=id_column_name,
-                modality=store_modality,
-            )
-
-        ids, distances = self._db.process_query(query=query, top_k=top_k, modality=query_modality)
+        ids, distances = self._db.process_query(query=query_input, top_k=top_k, modality=modality)
         metadata = self._db.fetch_metadata(ids)
         return ids, distances, metadata
+
+    # TODO: handle store_modality
+    def _get_db_backend(self, store_modality=None):
+        with shelve.open(SHELVE_DB) as shelve_db:
+            if len(shelve_db[self._project_name]["upsertion_logs"]) < 1:
+                raise ValueError("No embeddings! Please upsert data before running your query")
+
+            # TODO: ensure that the info lives here as expected!
+            last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
+
+        embeddings_dir = last_upsertion["embeddings_dir"]
+        metadata_path = last_upsertion["metadata_path"]
+        id_column_name = last_upsertion["id_column_name"]
+        # TODO: fix if we have multiple modalities stored.
+        store_modality = store_modality if store_modality is not None else Modality(last_upsertion["modality"])
+
+        return get_backend(
+            embedding_generator=self._embedding_generator,
+            embedding_backend=self._embedding_backend,
+            distance_metric=self._distance_metric,
+            embeddings_dir=embeddings_dir,
+            metadata_path=metadata_path,
+            id_column_name=id_column_name,
+            modality=store_modality,
+        )
 
     def _upsert(
         self,
