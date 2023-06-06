@@ -18,6 +18,7 @@ from rich import print
 from rich.prompt import Prompt
 
 from peachdb.backends import get_backend
+from peachdb.backends.backend_base import BackendBase
 from peachdb.constants import BLOB_STORE, SHELVE_DB
 from peachdb.embedder import EmbeddingProcessor
 from peachdb.embedder.utils import Modality, is_s3_uri
@@ -31,7 +32,7 @@ class QueryResponse(BaseModel):
 
 class _Base(abc.ABC):
     @abc.abstractmethod
-    def query(self, text: str, top_k: int = 5):
+    def query(self, query: str, query_modality: Modality, store_modality: Optional[Modality] = None, top_k: int = 5):
         pass
 
 
@@ -65,7 +66,7 @@ class PeachDB(_Base):
                 }
                 print(f"[u]PeachDB has been created for project: [bold green]{project_name}[/bold green][/u]")
 
-        self._db = None
+        self._db: Optional[BackendBase] = None
 
     def deploy(self):
         if self._db is None:
@@ -80,9 +81,18 @@ class PeachDB(_Base):
             allow_headers=["*"],
         )
 
-        @app.get("/query", response_model=QueryResponse)
-        async def get_query_handler(text: str, top_k: int = 5):
-            ids, distances, metadata = self.query(text, top_k=top_k)
+        @app.get("/text", response_model=QueryResponse)
+        async def text_query_handler(text: str, top_k: int = 5):
+            ids, distances, metadata = self.query(text, query_modality="text", top_k=top_k)
+            return {
+                "ids": ids.tolist(),
+                "distances": distances.tolist(),
+                "metadata": metadata.to_dict(orient="records"),
+            }
+
+        @app.get("/audio", response_model=QueryResponse)
+        async def audio_query_handler(audiopath: str, top_k: int = 5):
+            ids, distances, metadata = self.query(audiopath, query_modality="audio", top_k=top_k)
             return {
                 "ids": ids.tolist(),
                 "distances": distances.tolist(),
@@ -97,34 +107,44 @@ class PeachDB(_Base):
         except KeyboardInterrupt:
             self._db.cleanup()
 
-    def query(self, text: str, top_k: int = 5) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-        assert text and self._db
+    def query(
+        self,
+        query: str,
+        query_modality: str | Modality,
+        store_modality: Optional[Modality] = None,
+        top_k: int = 5,
+    ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
+        assert query and query_modality
+        if isinstance(query_modality, str):
+            query_modality = Modality(query_modality)
 
         if self._db is None:
-            self._get_db_backend()
+            with shelve.open(SHELVE_DB) as shelve_db:
+                assert (
+                    len(shelve_db[self._project_name]["upsertion_logs"]) == 1
+                ), "Only one upsertion per project is supported at this time."
 
-        ids, distances = self._db.process_query(text, top_k)
+                # TODO: ensure that the info lives here as expected!
+                last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
+            embeddings_dir = last_upsertion["embeddings_dir"]
+            metadata_path = last_upsertion["metadata_path"]
+            id_column_name = last_upsertion["id_column_name"]
+            # TODO: fix if we have multiple modalities stored.
+            store_modality = store_modality if store_modality is not None else Modality(last_upsertion["modality"])
+
+            self._db = get_backend(
+                embedding_generator=self._embedding_generator,
+                embedding_backend=self._embedding_backend,
+                distance_metric=self._distance_metric,
+                embeddings_dir=embeddings_dir,
+                metadata_path=metadata_path,
+                id_column_name=id_column_name,
+                modality=store_modality,
+            )
+
+        ids, distances = self._db.process_query(query=query, top_k=top_k, modality=query_modality)
         metadata = self._db.fetch_metadata(ids)
         return ids, distances, metadata
-
-    def _get_db_backend(self):
-        # TODO: our embeddings now have "embeddings_text", "embeddings_audio", "embeddings_image". Adjust for this.
-        with shelve.open(SHELVE_DB) as shelve_db:
-            assert (
-                len(shelve_db[self._project_name]["upsertion_logs"]) == 1
-            ), "Only one upsertion per project is supported at this time."
-
-            # TODO: ensure that the info lives here as expected!
-            last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
-
-        self._db = get_backend(
-            embedding_generator=self._embedding_generator,
-            embedding_backend=self._embedding_backend,
-            distance_metric=self._distance_metric,
-            embeddings_dir=last_upsertion["embeddings_dir"],
-            metadata_path=last_upsertion["metadata_path"],
-            id_column_name=last_upsertion["id_column_name"],
-        )
 
     def upsert_text(
         self,
@@ -157,7 +177,9 @@ class PeachDB(_Base):
         processor.process()
 
         with shelve.open(SHELVE_DB) as shelve_db:
-            shelve_db[self._project_name]["upsertion_logs"].append(
+            _save = shelve_db[self._project_name]
+
+            _save["upsertion_logs"].append(
                 {
                     "embeddings_dir": processor.embeddings_output_dir,
                     "metadata_path": csv_path,
@@ -165,9 +187,11 @@ class PeachDB(_Base):
                     "id_column_name": id_column_name,
                     "max_rows": max_rows,
                     "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
-                    "modality": str(Modality.TEXT),
+                    "modality": Modality.TEXT.value,
                 }
             )
+
+            shelve_db[self._project_name] = _save
 
     def upsert_audio(
         self,
@@ -200,7 +224,9 @@ class PeachDB(_Base):
         processor.process()
 
         with shelve.open(SHELVE_DB) as shelve_db:
-            shelve_db[self._project_name]["upsertion_logs"].append(
+            _save = shelve_db[self._project_name]
+
+            _save["upsertion_logs"].append(
                 {
                     "embeddings_dir": processor.embeddings_output_dir,
                     "metadata_path": csv_path,
@@ -208,9 +234,10 @@ class PeachDB(_Base):
                     "id_column_name": id_column_name,
                     "max_rows": max_rows,
                     "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
-                    "modality": str(Modality.TEXT),
+                    "modality": Modality.AUDIO.value,
                 }
             )
+            shelve_db[self._project_name] = _save
 
     @staticmethod
     def delete(project_name: str):

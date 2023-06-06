@@ -60,9 +60,9 @@ class S3Entity(metaclass=abc.ABCMeta):
         pass
 
     def __enter__(self) -> str:
-        assert self.temp_resource is not None
-
         self.download()
+
+        assert self.temp_resource is not None
         return self.temp_resource.name
 
     def __exit__(self, exc_type, exc_val, exc_tb):
