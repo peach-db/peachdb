@@ -2,13 +2,9 @@
 PeachDB Library
 """
 import abc
-
-# import asyncio
 import os
 import shelve
 import shutil
-
-# from pathlib import Path
 from typing import List, Optional, Tuple
 
 import numpy as np
