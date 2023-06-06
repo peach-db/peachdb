@@ -1,4 +1,3 @@
-import asyncio
 import os
 import shutil
 from collections import namedtuple
@@ -12,7 +11,7 @@ import peachdb.embedder.containers.base
 from peachdb.constants import BLOB_STORE
 from peachdb.embedder.utils import Modality, S3File, is_s3_uri
 
-Chunk = namedtuple("Chunk", ["texts", "ids"])
+Chunk = namedtuple("Chunk", ["texts_or_paths", "ids"])
 
 
 # TODO: split into two separate classes LocalEmbeddingsProcessor & S3EmbeddingsProcessor
@@ -90,7 +89,6 @@ class EmbeddingProcessor:
                 return self._read_dataset(downloaded_dataset)
 
     def _read_dataset(self, dataset_path: str):
-        # TODO: implement audio/image support. (#multimodality)
         data = duckdb.read_csv(dataset_path)
         sql_query = f"SELECT {self._column_to_embed}, {self._id_column_name} FROM data"
         if self._max_rows:
@@ -105,12 +103,12 @@ class EmbeddingProcessor:
         inputs = []
 
         for chunk in chunked_data:
-            texts = []  # TODO: replace by better name as audio/image paths here work too.
+            texts_or_paths = []
             ids = []
-            for text, id in chunk:
-                texts.append(text)
+            for text_or_path, id in chunk:
+                texts_or_paths.append(text_or_path)
                 ids.append(id)
-            inputs += [Chunk(texts, ids)]
+            inputs += [Chunk(texts_or_paths, ids)]
 
         return inputs
 
@@ -124,9 +122,10 @@ class EmbeddingProcessor:
                 (
                     chunk.ids,
                     f"{self.embeddings_output_dir}/{fname}_{idx}_{self._embedding_model_name}.parquet",
-                    chunk.texts if self._modality == Modality.TEXT else None,
-                    chunk.texts if self._modality == Modality.AUDIO else None,
-                    None,
+                    # TODO: enable support of using multiple modalities at the same time here (#multi-modality)
+                    chunk.texts_or_paths if self._modality == Modality.TEXT else None,
+                    chunk.texts_or_paths if self._modality == Modality.AUDIO else None,
+                    chunk.texts_or_paths if self._modality == Modality.IMAGE else None,
                     True,
                 )
                 for idx, chunk in enumerate(chunks)

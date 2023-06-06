@@ -146,17 +146,19 @@ class PeachDB(_Base):
         metadata = self._db.fetch_metadata(ids)
         return ids, distances, metadata
 
-    def upsert_text(
+    def _upsert(
         self,
         csv_path: str,
         column_to_embed: str,
         id_column_name: str,
+        modality: Modality,
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
         PeachDB._validate_csv_path(csv_path)
         assert column_to_embed
         assert id_column_name
+        assert modality
 
         if is_s3_uri(csv_path):
             assert (
@@ -171,7 +173,7 @@ class PeachDB(_Base):
             embedding_model_name=self._embedding_generator,
             project_name=self._project_name,
             s3_bucket=embeddings_output_s3_bucket_uri,
-            modality=Modality.TEXT,
+            modality=modality,
         )
 
         processor.process()
@@ -187,11 +189,27 @@ class PeachDB(_Base):
                     "id_column_name": id_column_name,
                     "max_rows": max_rows,
                     "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
-                    "modality": Modality.TEXT.value,
+                    "modality": modality.value,
                 }
             )
-
             shelve_db[self._project_name] = _save
+
+    def upsert_text(
+        self,
+        csv_path: str,
+        column_to_embed: str,
+        id_column_name: str,
+        embeddings_output_s3_bucket_uri: Optional[str] = None,
+        max_rows: Optional[int] = None,
+    ):
+        self._upsert(
+            csv_path=csv_path,
+            column_to_embed=column_to_embed,
+            id_column_name=id_column_name,
+            embeddings_output_s3_bucket_uri=embeddings_output_s3_bucket_uri,
+            max_rows=max_rows,
+            modality=Modality.TEXT,
+        )
 
     def upsert_audio(
         self,
@@ -201,43 +219,31 @@ class PeachDB(_Base):
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
-        PeachDB._validate_csv_path(csv_path)
-        assert column_to_embed
-        assert id_column_name
-
-        if is_s3_uri(csv_path):
-            assert (
-                embeddings_output_s3_bucket_uri
-            ), "Please provide `embeddings_output_s3_bucket_uri` for output embeddings when the `csv_path` is an S3 URI."
-
-        processor = EmbeddingProcessor(
+        self._upsert(
             csv_path=csv_path,
             column_to_embed=column_to_embed,
             id_column_name=id_column_name,
+            embeddings_output_s3_bucket_uri=embeddings_output_s3_bucket_uri,
             max_rows=max_rows,
-            embedding_model_name=self._embedding_generator,
-            project_name=self._project_name,
-            s3_bucket=embeddings_output_s3_bucket_uri,
             modality=Modality.AUDIO,
         )
 
-        processor.process()
-
-        with shelve.open(SHELVE_DB) as shelve_db:
-            _save = shelve_db[self._project_name]
-
-            _save["upsertion_logs"].append(
-                {
-                    "embeddings_dir": processor.embeddings_output_dir,
-                    "metadata_path": csv_path,
-                    "column_to_embed": column_to_embed,
-                    "id_column_name": id_column_name,
-                    "max_rows": max_rows,
-                    "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
-                    "modality": Modality.AUDIO.value,
-                }
-            )
-            shelve_db[self._project_name] = _save
+    def upsert_image(
+        self,
+        csv_path: str,
+        column_to_embed: str,
+        id_column_name: str,
+        embeddings_output_s3_bucket_uri: Optional[str] = None,
+        max_rows: Optional[int] = None,
+    ):
+        self._upsert(
+            csv_path=csv_path,
+            column_to_embed=column_to_embed,
+            id_column_name=id_column_name,
+            embeddings_output_s3_bucket_uri=embeddings_output_s3_bucket_uri,
+            max_rows=max_rows,
+            modality=Modality.IMAGE,
+        )
 
     @staticmethod
     def delete(project_name: str):
