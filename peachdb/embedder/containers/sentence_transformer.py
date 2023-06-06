@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Optional, Union
 
 import modal
+import pyarrow as pa  # type: ignore
 
 from peachdb.embedder.containers.base import EmbeddingModelBase, base_container_image, modal_compute_spec_decorator
 from peachdb.embedder.models.sentence_transformer import SentenceTransformerModel
@@ -36,26 +37,23 @@ class SentenceTransformerEmbedder(EmbeddingModelBase):
     def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool):
         raise NotImplementedError
 
-    @staticmethod
     @property
-    def _can_take_text_input():
+    def _can_take_text_input(cls):
         return True
 
-    @staticmethod
     @property
-    def _can_take_audio_input():
+    def _can_take_audio_input(cls):
         return False
 
-    @staticmethod
     @property
-    def _can_take_image_input():
+    def _can_take_image_input(cls):
         # return True - once implemented!
         return False
 
     # We need to rewrite this function in all the inherited class so we can use the @modal method decorator.
     # TODO: check if above statement is true / if we can factor this out.
     @modal.method()
-    def calculate_embeddings(
+    def calculate_embeddings(  # type: ignore
         self,
         ids: list,
         output_path: str,
@@ -63,7 +61,7 @@ class SentenceTransformerEmbedder(EmbeddingModelBase):
         audio_paths: Optional[list] = None,
         image_paths: Optional[list] = None,
         show_progress_bar: bool = False,
-    ):
+    ) -> Union[None, pa.Table]:
         return super().calculate_embeddings(
             ids=ids,
             output_path=output_path,

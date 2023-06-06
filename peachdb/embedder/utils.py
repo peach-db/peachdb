@@ -1,18 +1,25 @@
 import abc
+import concurrent.futures
 import datetime
 import logging
+import os
 import subprocess
 import tempfile
 import uuid
+from enum import Enum
 from functools import cache, wraps
 from types import SimpleNamespace
-from typing import Optional, Type
+from typing import List, Optional, Type, Union
 
 import tqdm  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-Modality = SimpleNamespace(TEXT="text", AUDIO="audio", IMAGE="image")
+
+class Modality(Enum):
+    TEXT = "text"
+    AUDIO = "audio"
+    IMAGE = "image"
 
 
 def handle_s3_download_error(func):
@@ -42,7 +49,7 @@ class S3Entity(metaclass=abc.ABCMeta):
     def __init__(self, s3_path: str):
         _verify_aws_cli_installed()
         self.s3_path = s3_path
-        self.temp_resource: Optional[Type[tempfile.NamedTemporaryFile] | Type[tempfile.TemporaryDirectory]] = None
+        self.temp_resource: Optional[Union[tempfile._TemporaryFileWrapper, tempfile.TemporaryDirectory]] = None
 
     @abc.abstractmethod
     def download(self):
@@ -53,6 +60,8 @@ class S3Entity(metaclass=abc.ABCMeta):
         pass
 
     def __enter__(self) -> str:
+        assert self.temp_resource is not None
+
         self.download()
         return self.temp_resource.name
 
@@ -61,6 +70,8 @@ class S3Entity(metaclass=abc.ABCMeta):
 
     @handle_s3_download_error
     def _download_from_s3(self, command: str) -> None:
+        assert self.temp_resource is not None
+
         with subprocess.Popen(
             ["aws", "s3", command, self.s3_path, self.temp_resource.name],
             stdout=subprocess.PIPE,
@@ -68,6 +79,7 @@ class S3Entity(metaclass=abc.ABCMeta):
             bufsize=1,
             universal_newlines=True,
         ) as download_process:
+            assert download_process.stdout is not None
             for line in download_process.stdout:
                 print("\r" + line.strip().ljust(120), end="", flush=True)
             print()
@@ -77,7 +89,7 @@ class S3Files(S3Entity):
     def __init__(self, s3_paths: list[str]):
         _verify_aws_cli_installed()
         self.s3_paths = s3_paths
-        self.temp_resources: Optional[list[Type[tempfile.NamedTemporaryFile]]] = None
+        self.temp_resources: Optional[List[tempfile._TemporaryFileWrapper]] = None
 
     @handle_s3_download_error
     def copy_file(self, path, resource_name) -> None:
@@ -90,12 +102,12 @@ class S3Files(S3Entity):
             bufsize=1,
             universal_newlines=True,
         ) as download_process:
+            assert download_process.stdout is not None
             for line in download_process.stdout:
                 pass
 
     def _download_from_s3(self) -> None:
-        import concurrent.futures
-        import os
+        assert self.temp_resources is not None
 
         print("CPU count: ", os.cpu_count())
 

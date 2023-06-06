@@ -102,7 +102,7 @@ class PeachDB(_Base):
             self._db.cleanup()
 
     def query(self, text: str, top_k: int = 5) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-        assert text
+        assert text and self._db
 
         if self._db is None:
             self._get_db_backend()

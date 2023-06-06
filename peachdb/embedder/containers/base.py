@@ -84,22 +84,19 @@ class EmbeddingModelBase(ABC):
     def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool) -> np.ndarray:
         pass
 
-    @staticmethod
     @property
     @abstractmethod
-    def _can_take_text_input() -> bool:
+    def _can_take_text_input(cls) -> bool:
         raise NotImplementedError
 
-    @staticmethod
     @property
     @abstractmethod
-    def _can_take_audio_input() -> bool:
+    def _can_take_audio_input(cls) -> bool:
         raise NotImplementedError
 
-    @staticmethod
     @property
     @abstractmethod
-    def _can_take_image_input() -> bool:
+    def _can_take_image_input(cls) -> bool:
         raise NotImplementedError
 
     def _check_s3_credentials(self):

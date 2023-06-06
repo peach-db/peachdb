@@ -36,25 +36,22 @@ class ImageBindEmbdedder(EmbeddingModelBase):
         # TODO: add handling of different batch sizes to EmbeddingProcessor. (#multi-modality)
         return self.model.encode_image(image_paths, IMAGEBIND_BATCH_SIZE // 8, show_progress_bar)
 
-    @staticmethod
     @property
-    def _can_take_text_input() -> bool:
+    def _can_take_text_input(cls) -> bool:
         return True
 
-    @staticmethod
     @property
-    def _can_take_audio_input() -> bool:
+    def _can_take_audio_input(cls) -> bool:
         return True
 
-    @staticmethod
     @property
-    def _can_take_image_input() -> bool:
+    def _can_take_image_input(cls) -> bool:
         return True
 
     # We need to rewrite this function in all the inherited class so we can use the @modal method decorator.
     # TODO: check if above statement is true / if we can factor this out.
     @modal.method()
-    def calculate_embeddings(
+    def calculate_embeddings(  # type: ignore
         self,
         ids: list,
         output_path: str,

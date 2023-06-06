@@ -24,7 +24,7 @@ class EmbeddingProcessor:
         id_column_name: str,
         embedding_model_name: str,
         project_name: str,
-        modality: Type[Modality],
+        modality: Modality,
         s3_bucket: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
