@@ -22,6 +22,14 @@ from peachdb.backends.backend_base import BackendBase
 from peachdb.constants import BLOB_STORE, SHELVE_DB
 from peachdb.embedder import EmbeddingProcessor
 from peachdb.embedder.utils import Modality, is_s3_uri
+from peachdb.validators import (
+    validate_columns,
+    validate_csv_path,
+    validate_distance_metric,
+    validate_embedding_backend,
+    validate_embedding_generator,
+    validate_embeddings_output_s3_bucket_uri,
+)
 
 
 class QueryResponse(BaseModel):
@@ -44,9 +52,9 @@ class PeachDB(_Base):
         distance_metric: str = "cosine",
         embedding_backend: str = "exact_cpu",
     ):
-        PeachDB._validate_embedding_generator(embedding_generator)
-        PeachDB._validate_distance_metric(distance_metric)
-        PeachDB._validate_embedding_backend(embedding_backend)
+        validate_embedding_generator(embedding_generator)
+        validate_distance_metric(distance_metric)
+        validate_embedding_backend(embedding_backend)
         super().__init__()
         self._project_name = project_name
         self._embedding_generator = embedding_generator
@@ -120,12 +128,13 @@ class PeachDB(_Base):
 
         if self._db is None:
             with shelve.open(SHELVE_DB) as shelve_db:
-                assert (
-                    len(shelve_db[self._project_name]["upsertion_logs"]) == 1
-                ), "Only one upsertion per project is supported at this time."
+                if len(shelve_db[self._project_name]["upsertion_logs"]) < 1:
+                    print("[red]No embeddings! Please upsert data before running your query[/]")
+                    return
 
                 # TODO: ensure that the info lives here as expected!
                 last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
+
             embeddings_dir = last_upsertion["embeddings_dir"]
             metadata_path = last_upsertion["metadata_path"]
             id_column_name = last_upsertion["id_column_name"]
@@ -154,44 +163,14 @@ class PeachDB(_Base):
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
-        PeachDB._validate_csv_path(csv_path)
-        assert column_to_embed
-        assert id_column_name
-
-        if is_s3_uri(csv_path):
-            assert (
-                embeddings_output_s3_bucket_uri
-            ), "Please provide `embeddings_output_s3_bucket_uri` for output embeddings when the `csv_path` is an S3 URI."
-
-        processor = EmbeddingProcessor(
+        self._upsert(
             csv_path=csv_path,
             column_to_embed=column_to_embed,
             id_column_name=id_column_name,
-            max_rows=max_rows,
-            embedding_model_name=self._embedding_generator,
-            project_name=self._project_name,
-            s3_bucket=embeddings_output_s3_bucket_uri,
             modality=Modality.TEXT,
+            embeddings_output_s3_bucket_uri=embeddings_output_s3_bucket_uri,
+            max_rows=max_rows,
         )
-
-        processor.process()
-
-        with shelve.open(SHELVE_DB) as shelve_db:
-            _save = shelve_db[self._project_name]
-
-            _save["upsertion_logs"].append(
-                {
-                    "embeddings_dir": processor.embeddings_output_dir,
-                    "metadata_path": csv_path,
-                    "column_to_embed": column_to_embed,
-                    "id_column_name": id_column_name,
-                    "max_rows": max_rows,
-                    "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
-                    "modality": Modality.TEXT.value,
-                }
-            )
-
-            shelve_db[self._project_name] = _save
 
     def upsert_audio(
         self,
@@ -201,14 +180,39 @@ class PeachDB(_Base):
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
-        PeachDB._validate_csv_path(csv_path)
-        assert column_to_embed
-        assert id_column_name
+        self._upsert(
+            csv_path=csv_path,
+            column_to_embed=column_to_embed,
+            id_column_name=id_column_name,
+            modality=Modality.AUDIO,
+            embeddings_output_s3_bucket_uri=embeddings_output_s3_bucket_uri,
+            max_rows=max_rows,
+        )
+
+    def _upsert(
+        self,
+        csv_path: str,
+        column_to_embed: str,
+        id_column_name: str,
+        modality: Modality,
+        embeddings_output_s3_bucket_uri: Optional[str] = None,
+        max_rows: Optional[int] = None,
+    ):
+        validate_csv_path(csv_path)
+        validate_embeddings_output_s3_bucket_uri(embeddings_output_s3_bucket_uri)
+        validate_columns(column_to_embed, id_column_name, csv_path)
 
         if is_s3_uri(csv_path):
             assert (
                 embeddings_output_s3_bucket_uri
             ), "Please provide `embeddings_output_s3_bucket_uri` for output embeddings when the `csv_path` is an S3 URI."
+
+        shelve_db = shelve.open(SHELVE_DB)
+        if len(shelve_db[self._project_name]["upsertion_logs"]) == 1:
+            print(
+                "[red]Only one upsertion is supported at this time. Either continue with this instance, or create a new one using PeachDB.create(...). You can reclaim this `project_name` by called PeachDB.delete(...)[/]"
+            )
+            return
 
         processor = EmbeddingProcessor(
             csv_path=csv_path,
@@ -217,27 +221,25 @@ class PeachDB(_Base):
             max_rows=max_rows,
             embedding_model_name=self._embedding_generator,
             project_name=self._project_name,
-            s3_bucket=embeddings_output_s3_bucket_uri,
+            embeddings_output_s3_bucket_uri=embeddings_output_s3_bucket_uri,
             modality=Modality.AUDIO,
         )
 
         processor.process()
 
-        with shelve.open(SHELVE_DB) as shelve_db:
-            _save = shelve_db[self._project_name]
-
-            _save["upsertion_logs"].append(
-                {
-                    "embeddings_dir": processor.embeddings_output_dir,
-                    "metadata_path": csv_path,
-                    "column_to_embed": column_to_embed,
-                    "id_column_name": id_column_name,
-                    "max_rows": max_rows,
-                    "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
-                    "modality": Modality.AUDIO.value,
-                }
-            )
-            shelve_db[self._project_name] = _save
+        _save = shelve_db[self._project_name]
+        _save["upsertion_logs"].append(
+            {
+                "embeddings_dir": processor.embeddings_output_dir,
+                "metadata_path": csv_path,
+                "column_to_embed": column_to_embed,
+                "id_column_name": id_column_name,
+                "max_rows": max_rows,
+                "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
+                "modality": modality.value,
+            }
+        )
+        shelve_db[self._project_name] = _save
 
     @staticmethod
     def delete(project_name: str):
@@ -262,33 +264,3 @@ class PeachDB(_Base):
             assert (
                 project_name not in db.keys()
             ), f"The project name '{project_name}' already exists. Please choose a unique name."
-
-    @staticmethod
-    def _validate_embedding_generator(engine: str):
-        supported_engines = ["sentence_transformer_L12", "imagebind"]
-        assert (
-            engine in supported_engines
-        ), f"Unsupported embedding generator. Currently supported engines are: {', '.join(supported_engines)}"
-
-    @staticmethod
-    def _validate_distance_metric(metric: str):
-        supported_metrics = ["l2", "cosine"]
-        assert (
-            metric in supported_metrics
-        ), f"Unsupported distance metric. The metric should be one of the following: {', '.join(supported_metrics)}"
-
-    @staticmethod
-    def _validate_embedding_backend(backend: str):
-        supported_backends = ["exact_cpu", "exact_gpu", "approx"]
-        assert (
-            backend in supported_backends
-        ), f"Unsupported embedding backend. The backend should be one of the following: {', '.join(supported_backends)}"
-
-    @staticmethod
-    def _validate_csv_path(csv_path: str):
-        assert csv_path, "csv_path parameter is missing. Please provide a valid local file path or an S3 URI."
-
-        if not is_s3_uri(csv_path):
-            assert os.path.exists(
-                csv_path
-            ), f"The provided csv_path '{csv_path}' does not exist. Please ensure that the path is either a valid local file path or an S3 URI (e.g., s3://path/to/csv)."

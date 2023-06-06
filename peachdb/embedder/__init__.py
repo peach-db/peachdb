@@ -25,7 +25,7 @@ class EmbeddingProcessor:
         embedding_model_name: str,
         project_name: str,
         modality: Modality,
-        s3_bucket: Optional[str] = None,
+        embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
         self._csv_path = csv_path
@@ -34,7 +34,9 @@ class EmbeddingProcessor:
         self._embedding_model_name = embedding_model_name
         self._max_rows = max_rows
         self._project_name = project_name
-        self._s3_bucket = s3_bucket.strip("/") + "/" if s3_bucket else None
+        self._embeddings_output_s3_bucket_uri = (
+            embeddings_output_s3_bucket_uri.strip("/") + "/" if embeddings_output_s3_bucket_uri else None
+        )
         self._modality = modality
 
         if self._embedding_model_name == "sentence_transformer_L12":
@@ -57,7 +59,7 @@ class EmbeddingProcessor:
     @property
     def embeddings_output_dir(self):
         if is_s3_uri(self._csv_path):
-            return f"s3://{self._s3_bucket}{self._project_name}/embeddings"
+            return f"{self._embeddings_output_s3_bucket_uri}{self._project_name}/embeddings"
 
         dir = f"{BLOB_STORE}/{self._project_name}/embeddings"
         os.makedirs(dir, exist_ok=True)
@@ -91,7 +93,7 @@ class EmbeddingProcessor:
 
     def _read_dataset(self, dataset_path: str):
         # TODO: implement audio/image support. (#multimodality)
-        data = duckdb.read_csv(dataset_path)
+        data = duckdb.read_csv(dataset_path, header=True)
         sql_query = f"SELECT {self._column_to_embed}, {self._id_column_name} FROM data"
         if self._max_rows:
             sql_query += f" LIMIT {self._max_rows}"
