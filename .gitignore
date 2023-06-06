@@ -207,3 +207,6 @@ tests/create_test_csv.py
 temp_draft.py
 multimodality_example.py
 **.flac
+
+dataset/
+test.py
