@@ -185,10 +185,9 @@ class PeachDB(_Base):
 
         shelve_db = shelve.open(SHELVE_DB)
         if len(shelve_db[self._project_name]["upsertion_logs"]) == 1:
-            print(
-                "[red]Only one upsertion is supported at this time. Either continue with this instance, or create a new one using PeachDB.create(...). You can reclaim this `project_name` by called PeachDB.delete(...)[/]"
+            raise ValueError(
+                "Only one upsertion is supported at this time. Either continue with this instance, or create a new one using PeachDB.create(...). You can reclaim this `project_name` by called PeachDB.delete(...)"
             )
-            return
 
         processor = EmbeddingProcessor(
             csv_path=csv_path,
