@@ -106,6 +106,15 @@ class PeachDB(_Base):
                 "metadata": metadata.to_dict(orient="records"),
             }
 
+        @app.get("/image", response_model=QueryResponse)
+        async def image_query_handler(imagepath: str, top_k: int = 5):
+            ids, distances, metadata = self.query(imagepath, query_modality="image", top_k=top_k)
+            return {
+                "ids": ids.tolist(),
+                "distances": distances.tolist(),
+                "metadata": metadata.to_dict(orient="records"),
+            }
+
         port = 8000
         url = ngrok.connect(port)
         print(f"[green]Public URL: {url}[/green]")
