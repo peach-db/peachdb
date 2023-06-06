@@ -7,7 +7,15 @@ class BaseModel(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def encode(self, texts, batch_size, show_progress_bar):
+    def encode_texts(self, texts, batch_size, show_progress_bar):
+        pass
+
+    @abc.abstractmethod
+    def encode_audio(self, local_paths, batch_size, show_progress_bar):
+        pass
+
+    @abc.abstractmethod
+    def encode_image(self, local_paths, batch_size, show_progress_bar):
         pass
 
     @staticmethod

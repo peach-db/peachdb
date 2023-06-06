@@ -195,3 +195,19 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+download_kaggle.py
+run.py
+.vscode/launch.json
+datasets/goodreads_books.json.gz
+tests/backends/test_numpy_backend.py
+tests/backends/tune_hnsw_backend.py
+tests/create_test_csv.py
+.vscode/settings.json
+temp_draft.py
+multimodality_example.py
+**.flac
+**.jpg
+
+dataset/
+test.py

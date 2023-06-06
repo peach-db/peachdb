@@ -2,21 +2,23 @@ import os
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Optional, Union
 
-import boto3
+import boto3  # type: ignore
 import modal
+import numpy as np
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
+import pyarrow as pa  # type: ignore
+import pyarrow.parquet as pq  # type: ignore
 import requests
 
 from peachdb.constants import CACHED_REQUIREMENTS_TXT, GIT_REQUIREMENTS_TXT
-from peachdb.embedder.utils import is_s3_uri
+from peachdb.embedder.utils import S3File, S3Files, is_s3_uri
 
 # Logic to get a requirements.txt file for the base image when package is on PyPI.
 dev_requirements_path = Path(__file__).parents[3] / "requirements.txt"
 if os.path.exists(dev_requirements_path):
-    requirements_path = dev_requirements_path
+    requirements_path: Union[Path, str] = dev_requirements_path
 else:
     response = requests.get(GIT_REQUIREMENTS_TXT)
 
@@ -55,7 +57,7 @@ base_container_image = (
         "./aws/install",
         "rm -rf awscliv2.zip aws",
     )
-    .pip_install_from_requirements(requirements_path)
+    .pip_install_from_requirements(str(requirements_path))
     # Container creation flow from inside a pypi package doesn't pick up it's own files.
     .pip_install("git+https://github.com/peach-db/peachdb")
 )
@@ -71,8 +73,31 @@ modal_compute_spec_decorator = lambda stub, image: stub.cls(
 
 class EmbeddingModelBase(ABC):
     @abstractmethod
-    def _calculate_embeddings(self, texts: list, show_progress_bar: bool):
+    def _calculate_text_embeddings(self, texts: list, show_progress_bar: bool) -> np.ndarray:
         pass
+
+    @abstractmethod
+    def _calculate_audio_embeddings(self, audio_paths: list, show_progress_bar: bool) -> np.ndarray:
+        pass
+
+    @abstractmethod
+    def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool) -> np.ndarray:
+        pass
+
+    @property
+    @abstractmethod
+    def _can_take_text_input(cls) -> bool:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def _can_take_audio_input(cls) -> bool:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def _can_take_image_input(cls) -> bool:
+        raise NotImplementedError
 
     def _check_s3_credentials(self):
         try:
@@ -82,20 +107,95 @@ class EmbeddingModelBase(ABC):
                 "AWS CLI not configured. Please set credentials locally using `aws configure` and try again."
             )
 
-    def calculate_embeddings(self, texts: list, ids: list, output_path: str, show_progress_bar: bool = False):
-        if is_s3_uri(output_path):
+    def calculate_embeddings(
+        self,
+        ids: list,
+        output_path: str,
+        texts: Optional[list] = None,
+        audio_paths: Optional[list] = None,
+        image_paths: Optional[list] = None,
+        show_progress_bar: bool = False,
+    ) -> Union[None, pa.Table]:
+        assert (
+            texts is not None or audio_paths is not None or image_paths is not None
+        ), "Must provide at least one input."
+
+        if (
+            is_s3_uri(output_path)
+            # TODO: refactor
+            or (any([is_s3_uri(audio_path) for audio_path in audio_paths]) if audio_paths is not None else False)
+            or (any([is_s3_uri(image_path) for image_path in image_paths]) if image_paths is not None else False)
+        ):
             self._check_s3_credentials()
 
-        embeddings = self._calculate_embeddings(texts, show_progress_bar)
+        embeddings_dict = {}
+        embeddings_dict["ids"] = ids
+
+        if texts is not None:
+            print("Processing text input...")
+            if self._can_take_text_input:
+                text_embeddings = self._calculate_text_embeddings(texts, show_progress_bar)
+                # TODO: update wherever this variable is used upstream
+                embeddings_dict["text_embeddings"] = text_embeddings.tolist()
+            else:
+                raise Exception("This model cannot take text input.")
+
+        # TODO: refactor below two if statements.
+        # TODO: think about if we want to error if a modality is not supported by a model, or just
+        # error, and then let things continue.
+        if audio_paths is not None:
+            print("Processing audio input...")
+            if self._can_take_audio_input:
+                assert (
+                    len(set([is_s3_uri(x) for x in audio_paths])) == 1
+                ), "All audio paths must be either local or S3 paths."
+
+                is_s3 = all([is_s3_uri(x) for x in audio_paths])
+
+                if is_s3:
+                    print("Downloading audio files from S3... Creating handlers...")
+                    audio_files_handler = S3Files(audio_paths)
+
+                    print("Handlers created, downloading...")
+                    local_audio_paths = audio_files_handler.download()
+                else:
+                    local_audio_paths = audio_paths
+
+                audio_embeddings = self._calculate_audio_embeddings(local_audio_paths, show_progress_bar)
+                embeddings_dict["audio_embeddings"] = audio_embeddings.tolist()
+            else:
+                raise Exception("This model cannot take audio input.")
+
+        if image_paths is not None:
+            if self._can_take_image_input:
+                assert (
+                    len(set([is_s3_uri(x) for x in image_paths])) == 1
+                ), "All image paths must be either local or S3 paths."
+
+                is_s3 = all([is_s3_uri(x) for x in image_paths])
+
+                if is_s3:
+                    print("Downloading audio files from S3... Creating handlers...")
+                    image_file_handlers = S3Files(image_paths)
+
+                    print("Handlers created, downloading...")
+                    local_image_paths = image_file_handlers.download()
+                else:
+                    local_image_paths = image_paths
+
+                image_embeddings = self._calculate_image_embeddings(local_image_paths, show_progress_bar)
+                embeddings_dict["image_embeddings"] = image_embeddings.tolist()
+            else:
+                raise Exception("This model cannot take image input.")
 
         tmp_output_path = "/root/embeddings.parquet"
 
-        df = pd.DataFrame({"ids": ids, "embeddings": embeddings.tolist()})
+        df = pd.DataFrame(embeddings_dict)
         table = pa.Table.from_pandas(df)
         pq.write_table(table, tmp_output_path)
 
         if is_s3_uri(output_path):
             os.system(f"aws s3 cp {tmp_output_path} {output_path}")
-            return
+            return None
 
         return table

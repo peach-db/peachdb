@@ -1,27 +1,20 @@
 from typing import Tuple
 
-import hnswlib
+import hnswlib  # type: ignore
 import numpy as np
 from rich import print
 
-from peachdb.backends.backend_base import BackendBase
+from peachdb.backends.backend_base import BackendBase, BackendConfig
+from peachdb.embedder.utils import Modality
 
 
 class HNSWBackend(BackendBase):
     def __init__(
         self,
-        embeddings_dir: str,
-        metadata_path: str,
-        embedding_generator: str,
-        distance_metric: str,
-        id_column_name: str,
+        backend_config: BackendConfig,
     ):
         super().__init__(
-            embeddings_dir=embeddings_dir,
-            metadata_path=metadata_path,
-            embedding_generator=embedding_generator,
-            distance_metric=distance_metric,
-            id_column_name=id_column_name,
+            backend_config=backend_config,
         )
         if self._embeddings.ndim != 2:
             raise ValueError("embeddings should be a 2-D matrix")

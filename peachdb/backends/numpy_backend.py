@@ -45,7 +45,7 @@ def cosine(query_embed: np.ndarray, embeds: np.ndarray) -> np.ndarray:
 
 
 class NumpyBackend(BackendBase):
-    def _process_query(self, query_embedding, top_k: int = 5):
+    def _process_query(self, query_embedding, top_k: int = 5) -> tuple:
         """Compute query embedding, calculate distance of query embedding and get top k."""
         print("Calculating distances...")
         distances = (
@@ -60,8 +60,8 @@ class NumpyBackend(BackendBase):
 
 
 if __name__ == "__main__":
-    import scipy.spatial.distance as scipy_distance
-    from sentence_transformers.util import cos_sim as st_cos_sim
+    import scipy.spatial.distance as scipy_distance  # type: ignore
+    from sentence_transformers.util import cos_sim as st_cos_sim  # type: ignore
 
     for dim in [3, 384, 1536]:
         a = np.random.rand(dim)
