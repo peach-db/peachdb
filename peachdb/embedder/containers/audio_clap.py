@@ -7,7 +7,9 @@ import pyarrow as pa  # type: ignore
 from peachdb.embedder.containers.base import EmbeddingModelBase, base_container_image, modal_compute_spec_decorator
 from peachdb.embedder.models.audio_clap import AudioClapModel
 
-AUDIOCLAP_BATCH_SIZE = 1024
+AUDIOCLAP_BATCH_SIZE_TEXT = 1024
+AUDIOCLAP_BATCH_SIZE_AUDIO = 128
+
 
 audioclap_stub = modal.Stub("AudioClap")
 
@@ -26,11 +28,11 @@ class AudioClapEmbdedder(EmbeddingModelBase):
 
     def _calculate_text_embeddings(self, texts, show_progress_bar: bool) -> np.ndarray:
         # TODO: fix batch_size
-        return self.model.encode_texts(texts, AUDIOCLAP_BATCH_SIZE, show_progress_bar)
+        return self.model.encode_texts(texts, AUDIOCLAP_BATCH_SIZE_TEXT, show_progress_bar)
 
     def _calculate_audio_embeddings(self, audio_paths, show_progress_bar: bool) -> np.ndarray:
         # TODO: fix batch_size
-        return self.model.encode_audio(audio_paths, AUDIOCLAP_BATCH_SIZE // 8, show_progress_bar)
+        return self.model.encode_audio(audio_paths, AUDIOCLAP_BATCH_SIZE_AUDIO, show_progress_bar)
 
     def _calculate_image_embeddings(self, image_paths: list, show_progress_bar: bool) -> np.ndarray:
         raise NotImplementedError
@@ -99,5 +101,5 @@ if __name__ == "__main__":
     import sys
 
     with audioclap_stub.run():
-        # test_text.call(sys.argv[1])
+        test_text.call(sys.argv[1])
         test_audio.call(sys.argv[1])

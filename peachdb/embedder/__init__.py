@@ -52,6 +52,12 @@ class EmbeddingProcessor:
             self._embedding_model = ImageBindEmbdedder
             self._embedding_model_stub = imagebind_stub
             self._embedding_model_chunk_size = 1000
+        elif self._embedding_model_name == "audio_clap":
+            from peachdb.embedder.containers.audio_clap import AudioClapEmbdedder, audioclap_stub
+
+            self._embedding_model = AudioClapEmbdedder
+            self._embedding_model_stub = audioclap_stub
+            self._embedding_model_chunk_size = 1000
         else:
             raise ValueError(f"Invalid embedding model name: {self._embedding_model_name}")
 
