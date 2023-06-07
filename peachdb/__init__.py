@@ -89,7 +89,7 @@ class PeachDB(_Base):
         )
 
         @app.get("/query", response_model=QueryResponse)
-        async def query_handler(query_input: str, modality: str, top_k: int = 5):
+        async def query_handler(query_input: str, modality: str | Modality, top_k: int = 5):
             if isinstance(modality, str):
                 modality = Modality(modality)
             ids, distances, metadata = self.query(query_input, modality=modality, top_k=top_k)
