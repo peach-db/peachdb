@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 from pyngrok import ngrok  # type: ignore
 
@@ -86,8 +87,19 @@ def _process_input_data(request_json: dict) -> pd.DataFrame:
     return df
 
 
+def http_error_handle(fn):
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            return Response(content="An unknown error occured. Please contact the PeachDB team.", status_code=500)
+
+    return wrapper
+
+
 # TODO: we need an init that figures out which model to use?
 @app.post("/upsert-text")
+@http_error_handle
 async def upsert_handler(request: Request):
     """
     Takes texts as input rather than vectors (unlike Pinecone).
@@ -128,6 +140,23 @@ async def upsert_handler(request: Request):
         # Update the data_df with the new data, and save to disk.
         data_df = pd.concat([data_df, new_data_df], ignore_index=True)
     data_df.to_csv(project_info["exp_compound_csv_path"], index=False)
+
+    # release lock
+    with shelve.open(SHELVE_DB) as shelve_db:
+        project_info = shelve_db.get(project_name, None)
+        project_info["lock"] = False
+        shelve_db[project_name] = project_info
+
+
+@app.get("/query-embeddings")
+@http_error_handle
+async def query_embeddings_handler(request: Request):
+    data = await request.json()
+    text = data["text"]
+    top_k = int(data.get("top_k", 5))
+    namespace = data.get("namespace", None)
+
+    peach_db.query(query_input=text, modality="text", namespace=namespace, top_k=top_k)
 
 
 if __name__ == "__main__":

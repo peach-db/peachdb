@@ -58,6 +58,11 @@ class NumpyBackend(BackendBase):
         results = np.argsort(distances)[:top_k]
         return self._ids[results], distances[results]
 
+    def download_data_for_new_upsertions(self, upsertion_logs: list):
+        # TODO: add test that we're not loading any extra data!
+        # TODO: this is likely going to be quite slow?
+        self._embeddings, self._ids = self._get_embeddings(upsertion_logs[-1]["embeddings_dir"])
+
 
 if __name__ == "__main__":
     import scipy.spatial.distance as scipy_distance  # type: ignore

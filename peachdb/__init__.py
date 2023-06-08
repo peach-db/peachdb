@@ -21,6 +21,7 @@ from rich.prompt import Prompt
 
 from peachdb.backends import get_backend
 from peachdb.backends.backend_base import BackendBase
+from peachdb.backends.numpy_backend import NumpyBackend
 from peachdb.constants import BLOB_STORE, SHELVE_DB
 from peachdb.embedder import EmbeddingProcessor
 from peachdb.embedder.utils import Modality, is_s3_uri
@@ -41,7 +42,14 @@ class QueryResponse(BaseModel):
 
 class _Base(abc.ABC):
     @abc.abstractmethod
-    def query(self, query_input: str, modality: Modality, store_modality: Optional[Modality] = None, top_k: int = 5):
+    def query(
+        self,
+        query_input: str,
+        modality: Modality,
+        namespace: Optional[str],
+        store_modality: Optional[Modality] = None,
+        top_k: int = 5,
+    ):
         pass
 
 
@@ -131,6 +139,7 @@ class PeachDB(_Base):
         self,
         query_input: str,
         modality: str | Modality,
+        namespace: Optional[str] = None,
         store_modality: Optional[Modality] = None,
         top_k: int = 5,
     ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
@@ -139,11 +148,30 @@ class PeachDB(_Base):
         if isinstance(modality, str):
             modality = Modality(modality)
 
+        # TODO: handle namespace
+
         if self._db is None:
             self._db = self._get_db_backend()
 
+        assert isinstance(self._db, NumpyBackend), "Only NumpyBackend is supported for now."
+
+        # check insertion logs for any new upsertion, and download locally
+        with shelve.open(SHELVE_DB) as shelve_db:
+            project_info = shelve_db[self._project_name]
+            assert not project_info["lock"], "Please wait for the upsertion to finish before querying."
+            project_info["lock"] = True
+            shelves = project_info["upsertion_logs"]
+
+        self._db.download_data_for_new_upsertions(project_info["upsertion_logs"])
+
         ids, distances = self._db.process_query(query=query_input, top_k=top_k, modality=modality)
         metadata = self._db.fetch_metadata(ids)
+
+        # release lock
+        with shelve.open(SHELVE_DB) as shelve_db:
+            project_info = shelve_db[self._project_name]
+            project_info["lock"] = False
+
         return ids, distances, metadata
 
     # TODO: handle store_modality
