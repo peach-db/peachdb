@@ -2,6 +2,7 @@
 PeachDB Library
 """
 import abc
+import datetime
 import os
 import shelve
 import shutil
@@ -12,6 +13,7 @@ import pandas as pd
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.requests import Request
 from pydantic import BaseModel
 from pyngrok import ngrok  # type: ignore
 from rich import print
@@ -62,14 +64,32 @@ class PeachDB(_Base):
 
         with shelve.open(SHELVE_DB) as shelve_db:
             if self._project_name in shelve_db.keys():
-                shelve_db[project_name]["query_logs"].append(
-                    {"distance_metric": distance_metric, "embedding_backend": embedding_backend}
-                )
+                assert set(shelve_db[self._project_name].keys()) == set(
+                    [
+                        "embedding_generator",
+                        "exp_compound_csv_path",
+                        "query_logs",
+                        "upsertion_logs",
+                        "distance_metric",
+                        "embedding_backend",
+                        "lock",
+                        "init_logs",
+                    ]
+                ), "The project name already exists but the data is corrupted. Please delete the project and try again."
+
+                project_info = shelve_db[self._project_name]
+                project_info["init_logs"].append({"time": datetime.datetime.now()})
+                shelve_db[project_name] = project_info
             else:
                 shelve_db[project_name] = {
                     "embedding_generator": embedding_generator,
-                    "query_logs": [{"distance_metric": distance_metric, "embedding_backend": embedding_backend}],
+                    "exp_compound_csv_path": os.path.join(BLOB_STORE, project_name, "exp_compound.csv"),
+                    "query_logs": [],
                     "upsertion_logs": [],
+                    "distance_metric": distance_metric,
+                    "embedding_backend": embedding_backend,
+                    "lock": False,
+                    "init_logs": [{"time": datetime.datetime.now()}],
                 }
                 print(f"[u]PeachDB has been created for project: [bold green]{project_name}[/bold green][/u]")
 
@@ -115,6 +135,7 @@ class PeachDB(_Base):
         top_k: int = 5,
     ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
         assert query_input and modality
+        # TODO: add query logs.
         if isinstance(modality, str):
             modality = Modality(modality)
 
@@ -172,10 +193,6 @@ class PeachDB(_Base):
             ), f"The provided output_bucket_s3_uri {embeddings_output_s3_bucket_uri} is not a S3 URI"
 
         shelve_db = shelve.open(SHELVE_DB)
-        if len(shelve_db[self._project_name]["upsertion_logs"]) == 1:
-            raise ValueError(
-                "Only one upsertion is supported at this time. Either continue with this instance, or create a new one using PeachDB.create(...). You can reclaim this `project_name` by called PeachDB.delete(...)"
-            )
 
         processor = EmbeddingProcessor(
             csv_path=csv_path,
@@ -191,7 +208,6 @@ class PeachDB(_Base):
         processor.process()
 
         _save = shelve_db[self._project_name]
-
         _save["upsertion_logs"].append(
             {
                 "embeddings_dir": processor.embeddings_output_dir,

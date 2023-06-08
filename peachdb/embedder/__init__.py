@@ -119,6 +119,8 @@ class EmbeddingProcessor:
         with self._embedding_model_stub.run():
             st = self._embedding_model()
 
+            # NOTE: a unique fname here is being used to avoid conflicts in the stored data!
+            # Be careful about changing this logic.
             fname = self._csv_path.split("/")[-1].split(".")[0]
             input_tuples = [
                 # expected: (ids, output_path, texts, audio_paths, image_paths, show_progress)
