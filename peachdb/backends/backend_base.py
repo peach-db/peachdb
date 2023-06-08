@@ -71,6 +71,7 @@ class BackendBase(abc.ABC):
     def fetch_metadata(self, ids) -> pd.DataFrame:
         print("Fetching metadata...")
 
+        # NOTE: this is a hack, as we keep updating the metadata.
         data = duckdb.read_csv(self._metadata_filepath)
         id_str = " OR ".join([f"{self._id_column_name} = {id}" for id in ids])
         metadata = duckdb.sql(f"SELECT * FROM data WHERE {id_str}").df()

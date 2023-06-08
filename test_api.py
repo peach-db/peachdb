@@ -26,9 +26,7 @@ app.add_middleware(
 
 # TODO: remove below code when integrated inside PeachDB itself?
 
-
-# TODO: below ends up causing an overwrite, which is a problem for us!
-project_name = "test_text_06a644d15-94cf-4950-a644-2c2dc5acecbf"  # "test_text_0" + str(uuid4())
+project_name = "test_text_0bd32db93-72d3-4653-b53d-5f500b2531c7_2"
 
 peach_db = PeachDB(
     project_name=project_name,
@@ -53,7 +51,7 @@ def _validate_metadata_key_names_dont_conflict(metadatas_dict, namespace):
 
 
 def _process_input_data(request_json: dict) -> pd.DataFrame:
-    input_data = request_json["data"]
+    input_data = request_json
     namespace = request_json.get("namespace", None)
 
     # TODO: make metadata optional?
@@ -99,14 +97,14 @@ def http_error_handle(fn):
 
 # TODO: we need an init that figures out which model to use?
 @app.post("/upsert-text")
-@http_error_handle
+# TODO: make below decorator work.
+# @http_error_handle()
 async def upsert_handler(request: Request):
     """
     Takes texts as input rather than vectors (unlike Pinecone).
     """
     input_data = await request.json()
     new_data_df = _process_input_data(input_data)
-    print(new_data_df.head())
 
     with shelve.open(SHELVE_DB) as shelve_db:
         project_info = shelve_db.get(project_name, None)
@@ -120,7 +118,16 @@ async def upsert_handler(request: Request):
         data_df = pd.read_csv(project_info["exp_compound_csv_path"])
 
         # Check for intersection between the "ids" column of data_df and new_data_df
-        assert len(set(data_df["ids"]).intersection(set(new_data_df["ids"]))) == 0, "IDs must be unique"
+        if len(set(data_df["ids"].apply(str)).intersection(set(new_data_df["ids"].apply(str)))) != 0:
+            with shelve.open(SHELVE_DB) as shelve_db:
+                project_info = shelve_db.get(project_name, None)
+                project_info["lock"] = False
+                shelve_db[project_name] = project_info
+
+            return Response(
+                content="New data contains IDs that already exist in the database. This is not allowed.",
+                status_code=400,
+            )
 
     # We use unique csv_name to avoid conflicts in the stored data.
     with tempfile.NamedTemporaryFile(suffix=f"{uuid4()}.csv") as tmp:
@@ -139,7 +146,9 @@ async def upsert_handler(request: Request):
     if os.path.exists(project_info["exp_compound_csv_path"]):
         # Update the data_df with the new data, and save to disk.
         data_df = pd.concat([data_df, new_data_df], ignore_index=True)
-    data_df.to_csv(project_info["exp_compound_csv_path"], index=False)
+        data_df.to_csv(project_info["exp_compound_csv_path"], index=False)
+    else:
+        new_data_df.to_csv(project_info["exp_compound_csv_path"], index=False)
 
     # release lock
     with shelve.open(SHELVE_DB) as shelve_db:
@@ -148,15 +157,22 @@ async def upsert_handler(request: Request):
         shelve_db[project_name] = project_info
 
 
-@app.get("/query-embeddings")
-@http_error_handle
-async def query_embeddings_handler(request: Request):
+@app.get("/query")
+async def query_embeddings_handler(request: Request) -> dict:
     data = await request.json()
     text = data["text"]
     top_k = int(data.get("top_k", 5))
     namespace = data.get("namespace", None)
 
-    peach_db.query(query_input=text, modality="text", namespace=namespace, top_k=top_k)
+    ids, _, metadata = peach_db.query(query_input=text, modality="text", namespace=namespace, top_k=top_k)
+
+    result = []
+    for id in ids:
+        values = metadata[metadata["ids"] == id].values[0]
+        columns = metadata.columns
+        result.append({columns[i]: values[i] for i in range(len(columns))})
+
+    return {"result": result}
 
 
 if __name__ == "__main__":

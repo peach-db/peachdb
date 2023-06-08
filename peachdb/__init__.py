@@ -182,9 +182,9 @@ class PeachDB(_Base):
 
             # TODO: ensure that the info lives here as expected!
             last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
+            metadata_path = shelve_db[self._project_name]["exp_compound_csv_path"]
 
         embeddings_dir = last_upsertion["embeddings_dir"]
-        metadata_path = last_upsertion["exp_compound_csv_path"]
         id_column_name = last_upsertion["id_column_name"]
         # TODO: fix if we have multiple modalities stored.
         store_modality = store_modality if store_modality is not None else Modality(last_upsertion["modality"])
