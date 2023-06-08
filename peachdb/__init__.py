@@ -184,7 +184,7 @@ class PeachDB(_Base):
             last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
 
         embeddings_dir = last_upsertion["embeddings_dir"]
-        metadata_path = last_upsertion["metadata_path"]
+        metadata_path = last_upsertion["exp_compound_csv_path"]
         id_column_name = last_upsertion["id_column_name"]
         # TODO: fix if we have multiple modalities stored.
         store_modality = store_modality if store_modality is not None else Modality(last_upsertion["modality"])
@@ -239,7 +239,7 @@ class PeachDB(_Base):
         _save["upsertion_logs"].append(
             {
                 "embeddings_dir": processor.embeddings_output_dir,
-                "metadata_path": csv_path,
+                "csv_path": csv_path,
                 "column_to_embed": column_to_embed,
                 "id_column_name": id_column_name,
                 "max_rows": max_rows,
