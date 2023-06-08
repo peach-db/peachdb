@@ -155,22 +155,16 @@ class PeachDB(_Base):
 
         assert isinstance(self._db, NumpyBackend), "Only NumpyBackend is supported for now."
 
-        # check insertion logs for any new upsertion, and download locally
         with shelve.open(SHELVE_DB) as shelve_db:
             project_info = shelve_db[self._project_name]
             assert not project_info["lock"], "Please wait for the upsertion to finish before querying."
-            project_info["lock"] = True
             shelves = project_info["upsertion_logs"]
 
+        # check insertion logs for any new upsertion, and download locally
         self._db.download_data_for_new_upsertions(project_info["upsertion_logs"])
 
         ids, distances = self._db.process_query(query=query_input, top_k=top_k, modality=modality)
         metadata = self._db.fetch_metadata(ids)
-
-        # release lock
-        with shelve.open(SHELVE_DB) as shelve_db:
-            project_info = shelve_db[self._project_name]
-            project_info["lock"] = False
 
         return ids, distances, metadata
 
