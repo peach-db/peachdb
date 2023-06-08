@@ -1,7 +1,7 @@
 # PeachDB
 
-<h3 align="center">End-to-End Vector Embedding API Platform</h3>
-<h4 align="center">Automated, scalable and cost-effective computation using open-source multimodal models, integrated with popular indexes.</h4>
+<h3 align="center">PeachDB - the AI-First, Embeddings Database</h3>
+<h4 align="center">Managed solution to calculate, store and use embeddings with support for open-source and multimodal models.</h4>
 
 <br/>
 
@@ -47,7 +47,7 @@ Key features include:
     - For e.g. we processed the [Kaggle 5M song lyrics dataset](https://www.kaggle.com/datasets/nikhilnayak123/5-million-song-lyrics-dataset?resource=download&select=ds2.csv) in just *12 minutes at a cost of $4.90*, using sentence transformers!
 * **Multimodality**: Non-text embeddings have made significant progress, but they're always harder to work with. PeachDB provides native support for image/audio/text from day one.
 * **Open-source models**: We abstract away the setup requirements for open-source models. In our experience, getting started with almost all open-source models typically requires a few hours. Our prebuilt containers solve this.
-    - We've developed containers for [Sentence Transformer L12](https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2), [ImageBind](https://github.com/facebookresearch/ImageBind) & [CLAP](https://github.com/LAION-AI/CLAP)
+    - We've developed containers for [Sentence Tr   ansformer L12](https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2), [ImageBind](https://github.com/facebookresearch/ImageBind) & [CLAP](https://github.com/LAION-AI/CLAP)
         - ⏳ *Coming soon*: [OpenCLIP](https://github.com/mlfoundations/open_clip), [Microsoft E5-v2](https://arxiv.org/pdf/2212.03533.pdf), and more.
 * **Highly Customizable**: Tailor the DB to suit your needs. You can customize:
     - Embedding models: as described above.
