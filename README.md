@@ -1,7 +1,7 @@
 # PeachDB
 
 <h3 align="center">PeachDB - the AI-First, Embeddings Database</h3>
-<h4 align="center">Managed solution to calculate, store and use embeddings with support for open-source and multimodal models.</h4>
+<h4 align="center">Managed solution to calculate, store and use embeddings,<br> with support for open-source and multimodal models.</h4>
 
 <br/>
 
