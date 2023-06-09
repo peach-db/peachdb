@@ -217,4 +217,4 @@ if __name__ == "__main__":
     port = 8000
     url = ngrok.connect(port)
     print(f"[green]Public URL: {url}[/green]")
-    uvicorn.run("test_api:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("deploy_api:app", host="0.0.0.0", port=port)  # , reload=True)
