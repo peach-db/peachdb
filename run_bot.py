@@ -17,7 +17,7 @@ bot.add_data(
     ]
 )
 
-cid, answer = bot.create_conversation_with_query("Were did the convention convene?")
+cid, answer = bot.create_conversation_with_query("Where did the convention convene?")
 
 answer_2 = bot.continue_conversation_with_query(cid, "Who was the vice presidential nominee?")
 

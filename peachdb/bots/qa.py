@@ -14,7 +14,7 @@ from peachdb import PeachDB
 from peachdb.constants import BOTS_DB, CONVERSATIONS_DB, SHELVE_DB
 
 
-def _validate_embedding_model(embedding_model):
+def _validate_embedding_model(embedding_model: str):
     assert embedding_model in ["openai_ada"]
 
 
@@ -86,9 +86,6 @@ class QABot:
         llm_model_name: Optional[str] = None,
         system_prompt: Optional[str] = None,
     ):
-        _validate_embedding_model(embedding_model)
-        _validate_llm_model(llm_model_name)
-
         with shelve.open(BOTS_DB) as db:
             if bot_id in db:
                 assert system_prompt is None, "System prompt cannot be changed for existing bot."
@@ -96,7 +93,7 @@ class QABot:
                 assert llm_model_name is None, "LLM model cannot be changed for existing bot."
                 self._peachdb_project_id = db[bot_id]["peachdb_project_id"]
                 self._embedding_model = db[bot_id]["embedding_model"]
-                self._llm_model_name = db[bot_id]["llm_model"]
+                self._llm_model_name = db[bot_id]["llm_model_name"]
                 self._system_prompt = db[bot_id]["system_prompt"]
             else:
                 assert system_prompt is not None, "System prompt must be specified for new bot."
@@ -114,6 +111,9 @@ class QABot:
                     "llm_model_name": self._llm_model_name,
                     "system_prompt": self._system_prompt,
                 }
+
+        _validate_embedding_model(self._embedding_model)
+        _validate_llm_model(self._llm_model_name)
 
         self.peach_db = PeachDB(
             project_name=self._peachdb_project_id,

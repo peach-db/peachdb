@@ -14,6 +14,7 @@ from pyngrok import ngrok  # type: ignore
 from rich import print
 
 from peachdb import EmptyNamespace, PeachDB
+from peachdb.bots.qa import QABot
 from peachdb.constants import SHELVE_DB
 
 app = FastAPI()
@@ -217,6 +218,54 @@ async def query_embeddings_handler(request: Request):
         result.append(result_dict)
 
     return {"result": result}
+
+
+@app.post("/create-bot")
+async def create_bot_handler(request: Request):
+    request_json = await request.json()
+
+    bot = QABot(
+        bot_id=request_json["bot_id"],
+        system_prompt=request_json["system_prompt"],
+        llm_model_name=request_json["llm_model_name"] if "llm_model_name" in request_json else "gpt-3.5-turbo",
+        embedding_model=request_json["embedding_model_name"]
+        if "embedding_model_name" in request_json
+        else "openai_ada",
+    )
+
+    bot.add_data(documents=request_json["documents"])
+
+
+@app.post("/create-conversation")
+async def create_conversation_handler(request: Request):
+    request_json = await request.json()
+
+    bot_id = request_json["bot_id"]
+    query = request_json["query"]
+
+    bot = QABot(bot_id=bot_id)
+    cid, response = bot.create_conversation_with_query(query=query)
+
+    return {
+        "conversation_id": cid,
+        "response": response,
+    }
+
+
+@app.post("/continue-conversation")
+async def continue_conversation_handler(request: Request):
+    request_json = await request.json()
+
+    bot_id = request_json["bot_id"]
+    conversation_id = request_json["conversation_id"]
+    query = request_json["query"]
+
+    bot = QABot(bot_id=bot_id)
+    response = bot.continue_conversation_with_query(conversation_id=conversation_id, query=query)
+
+    return {
+        "response": response,
+    }
 
 
 if __name__ == "__main__":
