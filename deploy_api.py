@@ -25,16 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# TODO: remove below code when integrated inside PeachDB itself?
-
-project_name = "test_text_0bd32db93-72d3-4653-b53d-5f500b2531c7_5"
-
-peach_db = PeachDB(
-    project_name=project_name,
-    embedding_generator="sentence_transformer_L12",
-    embedding_backend="exact_cpu",
-)
-
 
 def _validate_data(texts, ids, metadatas_list):
     assert all(isinstance(text, str) for text in texts), "All texts must be strings"
@@ -117,6 +107,16 @@ async def upsert_handler(request: Request):
     Takes texts as input rather than vectors (unlike Pinecone).
     """
     input_data = await request.json()
+
+    project_name = input_data.get("project_name", None)
+    if project_name is None:
+        return Response(content="Project name must be specified.", status_code=400)
+
+    peach_db = PeachDB(
+        project_name=project_name,
+        embedding_generator="sentence_transformer_L12",
+        embedding_backend="exact_cpu",
+    )
     new_data_df = _process_input_data(input_data)
     namespace = input_data.get("namespace", None)
 
@@ -181,6 +181,17 @@ async def upsert_handler(request: Request):
 @app.get("/query")
 async def query_embeddings_handler(request: Request):
     data = await request.json()
+
+    project_name = data.get("project_name", None)
+    if project_name is None:
+        return Response(content="Project name must be specified.", status_code=400)
+
+    peach_db = PeachDB(
+        project_name=project_name,
+        embedding_generator="sentence_transformer_L12",
+        embedding_backend="exact_cpu",
+    )
+
     text = data["text"]
     top_k = int(data.get("top_k", 5))
     namespace = data.get("namespace", None)
