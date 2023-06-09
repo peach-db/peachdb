@@ -53,6 +53,10 @@ class _Base(abc.ABC):
         pass
 
 
+class EmptyNamespace(ValueError):
+    pass
+
+
 class PeachDB(_Base):
     def __init__(
         self,
@@ -173,14 +177,14 @@ class PeachDB(_Base):
             upsertions_namespace = [x for x in project_info["upsertion_logs"] if x["namespace"] == namespace]
 
             if len(upsertions_namespace) < 1:
-                raise ValueError("No embeddings in this namespace! Please upsert data before running your query")
+                raise EmptyNamespace("No embeddings in this namespace! Please upsert data before running your query")
 
             upsertion_embedding_dirs = [x["embeddings_dir"] for x in upsertions_namespace]
             assert (
                 len(set(upsertion_embedding_dirs)) == 1
             ), "All upsertions in a namespace must have the same embeddings_dir"
 
-            last_upsertion = upsertion_embedding_dirs[-1]
+            last_upsertion = upsertions_namespace[-1]
 
         embeddings_dir = last_upsertion["embeddings_dir"]
         id_column_name = last_upsertion["id_column_name"]

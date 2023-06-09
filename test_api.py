@@ -11,8 +11,9 @@ from fastapi.requests import Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from pyngrok import ngrok  # type: ignore
+from rich import print
 
-from peachdb import PeachDB
+from peachdb import EmptyNamespace, PeachDB
 from peachdb.constants import SHELVE_DB
 
 app = FastAPI()
@@ -26,7 +27,7 @@ app.add_middleware(
 
 # TODO: remove below code when integrated inside PeachDB itself?
 
-project_name = "test_text_0bd32db93-72d3-4653-b53d-5f500b2531c7_2"
+project_name = "test_text_0bd32db93-72d3-4653-b53d-5f500b2531c7_4"
 
 peach_db = PeachDB(
     project_name=project_name,
@@ -106,7 +107,7 @@ async def upsert_handler(request: Request):
     """
     input_data = await request.json()
     new_data_df = _process_input_data(input_data)
-    namespace = input_data.get("metadata", None)
+    namespace = input_data.get("namespace", None)
 
     with shelve.open(SHELVE_DB) as shelve_db:
         project_info = shelve_db.get(project_name, None)
@@ -118,7 +119,11 @@ async def upsert_handler(request: Request):
 
     if os.path.exists(project_info["exp_compound_csv_path"]):
         data_df = pd.read_csv(project_info["exp_compound_csv_path"])
-        data_df_namespace = data_df[data_df["namespace"] == namespace]
+
+        if namespace is None:
+            data_df_namespace = data_df[data_df["namespace"].isnull()]
+        else:
+            data_df_namespace = data_df[data_df["namespace"] == namespace]
 
         # Check for intersection between the "ids" column of data_df and new_data_df
         # TODO: add support on backend for string ids.
@@ -163,18 +168,24 @@ async def upsert_handler(request: Request):
 
 
 @app.get("/query")
-async def query_embeddings_handler(request: Request) -> dict:
+async def query_embeddings_handler(request: Request):
     data = await request.json()
     text = data["text"]
     top_k = int(data.get("top_k", 5))
     namespace = data.get("namespace", None)
 
-    ids, _, metadata = peach_db.query(query_input=text, modality="text", namespace=namespace, top_k=top_k)
+    try:
+        ids, _, metadata = peach_db.query(query_input=text, modality="text", namespace=namespace, top_k=top_k)
+    except EmptyNamespace:
+        return Response(content="Empty namespace.", status_code=400)
 
     result = []
     for id in ids:
         values = metadata[metadata["ids"] == id].values[0]
-        columns = metadata.columns
+        columns = list(metadata.columns)
+        columns = [
+            c for c in columns if c != "namespace"
+        ]  # Causes an error with JSON encoding when "namespace" is None and ends up as NaN here.
         result.append({columns[i]: values[i] for i in range(len(columns))})
 
     return {"result": result}
