@@ -25,6 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+EMBEDDING_GENERATOR = "openai_ada"
+EMBEDDING_BACKEND = "exact_cpu"
+
 
 def _validate_data(texts, ids, metadatas_list):
     assert all(isinstance(text, str) for text in texts), "All texts must be strings"
@@ -114,8 +117,8 @@ async def upsert_handler(request: Request):
 
     peach_db = PeachDB(
         project_name=project_name,
-        embedding_generator="sentence_transformer_L12",
-        embedding_backend="exact_cpu",
+        embedding_generator=EMBEDDING_GENERATOR,
+        embedding_backend=EMBEDDING_BACKEND,
     )
     new_data_df = _process_input_data(input_data)
     namespace = input_data.get("namespace", None)
@@ -188,8 +191,8 @@ async def query_embeddings_handler(request: Request):
 
     peach_db = PeachDB(
         project_name=project_name,
-        embedding_generator="sentence_transformer_L12",
-        embedding_backend="exact_cpu",
+        embedding_generator=EMBEDDING_GENERATOR,
+        embedding_backend=EMBEDDING_BACKEND,
     )
 
     text = data["text"]
@@ -197,18 +200,22 @@ async def query_embeddings_handler(request: Request):
     namespace = data.get("namespace", None)
 
     try:
-        ids, _, metadata = peach_db.query(query_input=text, modality="text", namespace=namespace, top_k=top_k)
+        ids, distances, metadata = peach_db.query(query_input=text, modality="text", namespace=namespace, top_k=top_k)
     except EmptyNamespace:
         return Response(content="Empty namespace.", status_code=400)
 
     result = []
-    for id in ids:
+    # TODO: we're aligning distances, ids, and metadata from different sources which could cause bugs.
+    # Fix this.
+    for id, dist in zip(ids, distances):
         values = metadata[metadata["ids"] == id].values[0]
         columns = list(metadata.columns)
         columns = [
             c for c in columns if c != "namespace"
         ]  # Causes an error with JSON encoding when "namespace" is None and ends up as NaN here.
-        result.append({columns[i]: values[i] for i in range(len(columns))})
+        result_dict = {columns[i]: values[i] for i in range(len(columns))}
+        result_dict["distance"] = dist
+        result.append(result_dict)
 
     return {"result": result}
 

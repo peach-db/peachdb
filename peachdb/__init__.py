@@ -165,7 +165,7 @@ class PeachDB(_Base):
         assert isinstance(self._db, NumpyBackend), "Only NumpyBackend is supported for now."
 
         ids, distances = self._db.process_query(query=query_input, top_k=top_k, modality=modality)
-        metadata = self._db.fetch_metadata(ids)
+        metadata = self._db.fetch_metadata(ids, namespace=namespace)
 
         return ids, distances, metadata
 
