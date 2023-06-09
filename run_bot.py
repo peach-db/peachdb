@@ -1,7 +1,10 @@
+import shelve
+
 from peachdb.bots.qa import QABot
+from peachdb.constants import CONVERSATIONS_DB
 
 bot = QABot(
-    bot_id="my_bot_6",
+    bot_id="my_bot_12",
     embedding_model="openai_ada",
     llm_model_name="gpt-3.5-turbo",
     system_prompt="Please answer questions about the 1880 Greenback Party National Convention.",
@@ -14,4 +17,8 @@ bot.add_data(
     ]
 )
 
-print(bot.query("Where did the convention convene?"))
+cid, answer = bot.create_conversation_with_query("Were did the convention convene?")
+
+answer_2 = bot.continue_conversation_with_query(cid, "Who was the vice presidential nominee?")
+
+answer_3 = bot.continue_conversation_with_query(cid, "What was The Greenback Party?")

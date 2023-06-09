@@ -11,7 +11,7 @@ import openai
 import pandas as pd
 
 from peachdb import PeachDB
-from peachdb.constants import BOTS_DB, SHELVE_DB
+from peachdb.constants import BOTS_DB, CONVERSATIONS_DB, SHELVE_DB
 
 
 def _validate_embedding_model(embedding_model):
@@ -138,11 +138,8 @@ class QABot:
             metadatas_dict=None,
         )
 
-    def query(self, query: str, top_k: int = 3) -> str:
+    def create_conversation_with_query(self, query: str, top_k: int = 3) -> tuple[str, str]:
         context_ids, context_distances, context_metadata = self.peach_db.query(query, top_k=top_k, modality="text")
-        print(context_ids)
-        print(context_distances)
-        print(context_metadata)
         assert "texts" in context_metadata
 
         contextual_query = "Use the below snippets to answer the subsequent questions. If the answer can't be found, write \"I don't know.\""
@@ -155,6 +152,28 @@ class QABot:
             {"role": "user", "content": contextual_query},
         ]
 
-        response = self._llm_model(messages)
+        response_message = self._llm_model(messages)["choices"][0]["message"]
 
-        return response["choices"][0]["message"]["content"]
+        conversation_id = str(uuid4())
+        with shelve.open(CONVERSATIONS_DB) as db:
+            while conversation_id in db:
+                conversation_id = str(uuid4())
+            db[conversation_id] = messages + [dict(response_message)]
+
+        return conversation_id, response_message["content"]
+
+    def continue_conversation_with_query(self, conversation_id: str, query: str, top_k: int = 3) -> str:
+        with shelve.open(CONVERSATIONS_DB) as db:
+            if conversation_id not in db:
+                raise ValueError("Conversation ID not found.")
+
+            messages = db[conversation_id]
+
+        messages.append({"role": "user", "content": query})
+
+        response_message = self._llm_model(messages)["choices"][0]["message"]
+
+        with shelve.open(CONVERSATIONS_DB) as db:
+            db[conversation_id] = messages + [response_message]
+
+        return response_message["content"]
