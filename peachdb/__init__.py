@@ -19,6 +19,7 @@ from pyngrok import ngrok  # type: ignore
 from rich import print
 from rich.prompt import Prompt
 
+import peachdb.utils
 from peachdb.backends import get_backend
 from peachdb.backends.backend_base import BackendBase
 from peachdb.backends.numpy_backend import NumpyBackend
@@ -255,6 +256,8 @@ class PeachDB(_Base):
         )
         shelve_db[self._project_name] = _save
         shelve_db.close()
+
+        peachdb.utils.sync_cache_dir_s3()
 
     def upsert_text(
         self,
