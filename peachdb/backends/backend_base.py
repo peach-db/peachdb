@@ -82,8 +82,8 @@ class BackendBase(abc.ABC):
         print("Fetching metadata...")
 
         # NOTE: this is a hack, as we keep updating the metadata.
-        data = duckdb.read_csv(self._metadata_filepath)
-        id_str = " OR ".join([f"{self._id_column_name} = {id}" for id in ids])
+        data = duckdb.read_csv(self._metadata_filepath, header=True)
+        id_str = " OR ".join([f"{self._id_column_name} = '{id}'" for id in ids])
         if namespace is None:
             metadata = duckdb.sql(f"SELECT * FROM data WHERE {id_str}").df()
         else:
@@ -116,7 +116,7 @@ class BackendBase(abc.ABC):
             embeddings = np.array(df["image_embeddings"].values.tolist()).astype("float32")
         else:
             raise ValueError(f"Unknown modality: {self._modality}")
-        ids = np.array(df["ids"].values.tolist()).astype("int64")
+        ids = np.asarray(df["ids"].apply(str).values.tolist())
         return embeddings, ids
 
     def _get_metadata_filepath(self, metadata_path: str) -> str:

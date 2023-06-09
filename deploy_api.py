@@ -63,7 +63,7 @@ def _process_input_data(request_json: dict) -> pd.DataFrame:
     else:
         raise ValueError("Data must be of the form (ids, texts) or (ids, texts, metadata)")
 
-    ids = [d[0] for d in data]
+    ids = [str(d[0]) for d in data]
     texts = [d[1] for d in data]
     metadatas_list: list = [d[2] for d in data]
 
@@ -156,7 +156,6 @@ async def upsert_handler(request: Request):
     with tempfile.NamedTemporaryFile(suffix=f"{uuid4()}.csv") as tmp:
         # TODO: what happens if ids' conflict?
         new_data_df.to_csv(tmp.name, index=False)  # TODO: check it won't cause an override.
-        print(tmp.name)
 
         peach_db.upsert_text(
             csv_path=tmp.name,

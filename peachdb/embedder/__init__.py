@@ -124,7 +124,7 @@ class EmbeddingProcessor:
             ids = []
             for text_or_path, id in chunk:
                 texts_or_paths.append(text_or_path)
-                ids.append(id)
+                ids.append(str(id))
             inputs += [Chunk(texts_or_paths, ids)]
 
         return inputs
