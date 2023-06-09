@@ -27,7 +27,7 @@ app.add_middleware(
 
 # TODO: remove below code when integrated inside PeachDB itself?
 
-project_name = "test_text_0bd32db93-72d3-4653-b53d-5f500b2531c7_4"
+project_name = "test_text_0bd32db93-72d3-4653-b53d-5f500b2531c7_5"
 
 peach_db = PeachDB(
     project_name=project_name,
@@ -59,6 +59,17 @@ def _process_input_data(request_json: dict) -> pd.DataFrame:
 
     # tuples of (id: str, text: list[float], metadata: dict[str, str]])
     data = input_data["data"]
+
+    assert len(set([len(d) for d in data])) == 1, "All data must have the same length"
+    if len(data[0]) == 3:
+        # we got (ids, texts, metadata)
+        pass
+    elif len(data[0]) == 2:
+        # we got (ids, texts)
+        data = [(d[0], d[1], {}) for d in data]
+    else:
+        raise ValueError("Data must be of the form (ids, texts) or (ids, texts, metadata)")
+
     ids = [d[0] for d in data]
     texts = [d[1] for d in data]
     metadatas_list: list = [d[2] for d in data]
