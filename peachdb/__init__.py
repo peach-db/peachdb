@@ -144,24 +144,20 @@ class PeachDB(_Base):
         top_k: int = 5,
     ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
         assert query_input and modality
+        with shelve.open(SHELVE_DB) as shelve_db:
+            project_info = shelve_db[self._project_name]
+            assert not project_info["lock"], "Please wait for the upsertion to finish before querying."
+
         # TODO: add query logs.
         if isinstance(modality, str):
             modality = Modality(modality)
 
-        # TODO: handle namespace
-
-        if self._db is None:
-            self._db = self._get_db_backend()
+        self._db = self._get_db_backend(namespace)
+        # was originally doing below, but now we just instantiate a new backend which loads everything into memory.
+        # # check insertion logs for any new upsertion, and download locally
+        # self._db.download_data_for_new_upsertions(project_info["upsertion_logs"])
 
         assert isinstance(self._db, NumpyBackend), "Only NumpyBackend is supported for now."
-
-        with shelve.open(SHELVE_DB) as shelve_db:
-            project_info = shelve_db[self._project_name]
-            assert not project_info["lock"], "Please wait for the upsertion to finish before querying."
-            shelves = project_info["upsertion_logs"]
-
-        # check insertion logs for any new upsertion, and download locally
-        self._db.download_data_for_new_upsertions(project_info["upsertion_logs"])
 
         ids, distances = self._db.process_query(query=query_input, top_k=top_k, modality=modality)
         metadata = self._db.fetch_metadata(ids)
@@ -169,18 +165,27 @@ class PeachDB(_Base):
         return ids, distances, metadata
 
     # TODO: handle store_modality
-    def _get_db_backend(self, store_modality=None):
+    def _get_db_backend(self, namespace: Optional[str] = None, store_modality: Optional[Modality] = None):
         with shelve.open(SHELVE_DB) as shelve_db:
-            if len(shelve_db[self._project_name]["upsertion_logs"]) < 1:
-                raise ValueError("No embeddings! Please upsert data before running your query")
+            project_info = shelve_db[self._project_name]
+            metadata_path = project_info["exp_compound_csv_path"]
 
-            # TODO: ensure that the info lives here as expected!
-            last_upsertion = shelve_db[self._project_name]["upsertion_logs"][-1]
-            metadata_path = shelve_db[self._project_name]["exp_compound_csv_path"]
+            upsertions_namespace = [x for x in project_info["upsertion_logs"] if x["namespace"] == namespace]
+
+            if len(upsertions_namespace) < 1:
+                raise ValueError("No embeddings in this namespace! Please upsert data before running your query")
+
+            upsertion_embedding_dirs = [x["embeddings_dir"] for x in upsertions_namespace]
+            assert (
+                len(set(upsertion_embedding_dirs)) == 1
+            ), "All upsertions in a namespace must have the same embeddings_dir"
+
+            last_upsertion = upsertion_embedding_dirs[-1]
 
         embeddings_dir = last_upsertion["embeddings_dir"]
         id_column_name = last_upsertion["id_column_name"]
-        # TODO: fix if we have multiple modalities stored.
+
+        # TODO: fix if we have multiple modalities stored. (#multi-modality)
         store_modality = store_modality if store_modality is not None else Modality(last_upsertion["modality"])
 
         return get_backend(
@@ -199,6 +204,7 @@ class PeachDB(_Base):
         column_to_embed: str,
         id_column_name: str,
         modality: Modality,
+        namespace: Optional[str] = None,
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
@@ -225,6 +231,7 @@ class PeachDB(_Base):
             project_name=self._project_name,
             embeddings_output_s3_bucket_uri=embeddings_output_s3_bucket_uri,
             modality=modality,
+            namespace=namespace,
         )
 
         processor.process()
@@ -239,15 +246,18 @@ class PeachDB(_Base):
                 "max_rows": max_rows,
                 "embeddings_output_s3_bucket_uri": embeddings_output_s3_bucket_uri,
                 "modality": modality.value,
+                "namespace": namespace,
             }
         )
         shelve_db[self._project_name] = _save
+        shelve_db.close()
 
     def upsert_text(
         self,
         csv_path: str,
         column_to_embed: str,
         id_column_name: str,
+        namespace: Optional[str] = None,
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
@@ -256,8 +266,9 @@ class PeachDB(_Base):
             column_to_embed=column_to_embed,
             id_column_name=id_column_name,
             embeddings_output_s3_bucket_uri=embeddings_output_s3_bucket_uri,
-            max_rows=max_rows,
             modality=Modality.TEXT,
+            namespace=namespace,
+            max_rows=max_rows,
         )
 
     def upsert_audio(

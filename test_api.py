@@ -55,7 +55,6 @@ def _process_input_data(request_json: dict) -> pd.DataFrame:
     namespace = request_json.get("namespace", None)
 
     # TODO: make metadata optional?
-    # TODO: add namepsaces?
 
     # tuples of (id: str, text: list[float], metadata: dict[str, str]])
     data = input_data["data"]
@@ -71,7 +70,9 @@ def _process_input_data(request_json: dict) -> pd.DataFrame:
     }
 
     _validate_metadata_key_names_dont_conflict(metadatas_dict, namespace)
-    if namespace is not None:
+    if namespace is None:
+        metadatas_dict["namespace"] = [None] * len(ids)
+    else:
         metadatas_dict["namespace"] = [namespace] * len(ids)
 
     df = pd.DataFrame(
@@ -105,6 +106,7 @@ async def upsert_handler(request: Request):
     """
     input_data = await request.json()
     new_data_df = _process_input_data(input_data)
+    namespace = input_data.get("metadata", None)
 
     with shelve.open(SHELVE_DB) as shelve_db:
         project_info = shelve_db.get(project_name, None)
@@ -116,16 +118,18 @@ async def upsert_handler(request: Request):
 
     if os.path.exists(project_info["exp_compound_csv_path"]):
         data_df = pd.read_csv(project_info["exp_compound_csv_path"])
+        data_df_namespace = data_df[data_df["namespace"] == namespace]
 
         # Check for intersection between the "ids" column of data_df and new_data_df
-        if len(set(data_df["ids"].apply(str)).intersection(set(new_data_df["ids"].apply(str)))) != 0:
+        # TODO: add support on backend for string ids.
+        if len(set(data_df_namespace["ids"].apply(str)).intersection(set(new_data_df["ids"].apply(str)))) != 0:
             with shelve.open(SHELVE_DB) as shelve_db:
                 project_info = shelve_db.get(project_name, None)
                 project_info["lock"] = False
                 shelve_db[project_name] = project_info
 
             return Response(
-                content="New data contains IDs that already exist in the database. This is not allowed.",
+                content="New data contains IDs that already exist in the database for this namespace. This is not allowed.",
                 status_code=400,
             )
 
@@ -141,6 +145,7 @@ async def upsert_handler(request: Request):
             id_column_name="ids",
             # TODO: below is manually set, this might cause issues!
             embeddings_output_s3_bucket_uri="s3://metavoice-vector-db/deployed_solution/",
+            namespace=namespace,
         )
 
     if os.path.exists(project_info["exp_compound_csv_path"]):

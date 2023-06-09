@@ -24,6 +24,7 @@ class EmbeddingProcessor:
         embedding_model_name: str,
         project_name: str,
         modality: Modality,
+        namespace: Optional[str] = None,
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
@@ -36,6 +37,7 @@ class EmbeddingProcessor:
         self._embeddings_output_s3_bucket_uri = (
             embeddings_output_s3_bucket_uri.strip("/") + "/" if embeddings_output_s3_bucket_uri else None
         )
+        self._namespace = namespace
         self._modality = modality
 
         if self._embedding_model_name == "sentence_transformer_L12":
@@ -58,9 +60,9 @@ class EmbeddingProcessor:
     @property
     def embeddings_output_dir(self):
         if is_s3_uri(self._csv_path):
-            return f"{self._embeddings_output_s3_bucket_uri}{self._project_name}/embeddings"
+            return f"{self._embeddings_output_s3_bucket_uri}{self._project_name}/embeddings/{self._namespace}"
 
-        dir = f"{BLOB_STORE}/{self._project_name}/embeddings"
+        dir = f"{BLOB_STORE}/{self._project_name}/embeddings/{self._namespace}"
         os.makedirs(dir, exist_ok=True)
         return dir
 
@@ -82,7 +84,7 @@ class EmbeddingProcessor:
             os.makedirs(project_blob_dir, exist_ok=True)
 
             fname = self._csv_path.split("/")[-1]
-            dataset_path = f"{project_blob_dir}/{fname}"
+            dataset_path = f"{project_blob_dir}/{self._namespace}_{fname}"
             shutil.copy2(self._csv_path, dataset_path)
             return self._read_dataset(dataset_path)
         else:
