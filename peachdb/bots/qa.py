@@ -14,6 +14,10 @@ from peachdb import PeachDB
 from peachdb.constants import BOTS_DB, CONVERSATIONS_DB, SHELVE_DB
 
 
+class ConversationNotFoundError(ValueError):
+    pass
+
+
 def _validate_embedding_model(embedding_model: str):
     assert embedding_model in ["openai_ada"]
 
@@ -165,7 +169,7 @@ class QABot:
     def continue_conversation_with_query(self, conversation_id: str, query: str, top_k: int = 3) -> str:
         with shelve.open(CONVERSATIONS_DB) as db:
             if conversation_id not in db:
-                raise ValueError("Conversation ID not found.")
+                raise ConversationNotFoundError("Conversation ID not found.")
 
             messages = db[conversation_id]
 

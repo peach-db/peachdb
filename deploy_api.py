@@ -3,6 +3,7 @@ import shelve
 import tempfile
 from uuid import uuid4
 
+import openai
 import pandas as pd
 import uvicorn
 from fastapi import FastAPI
@@ -14,7 +15,7 @@ from pyngrok import ngrok  # type: ignore
 from rich import print
 
 from peachdb import EmptyNamespace, PeachDB
-from peachdb.bots.qa import QABot
+from peachdb.bots.qa import ConversationNotFoundError, QABot
 from peachdb.constants import SHELVE_DB
 
 app = FastAPI()
@@ -233,18 +234,30 @@ async def create_bot_handler(request: Request):
         else "openai_ada",
     )
 
-    bot.add_data(documents=request_json["documents"])
+    try:
+        bot.add_data(documents=request_json["documents"])
+    except openai.error.RateLimitError:
+        return Response(content="OpenAI's server are currently overloaded. Please try again later.", status_code=400)
 
 
 @app.post("/create-conversation")
 async def create_conversation_handler(request: Request):
     request_json = await request.json()
 
+    if "bot_id" not in request_json:
+        return Response(content="bot_id must be specified.", status_code=400)
+
+    if "query" not in request_json:
+        return Response(content="query must be specified.", status_code=400)
+
     bot_id = request_json["bot_id"]
     query = request_json["query"]
 
     bot = QABot(bot_id=bot_id)
-    cid, response = bot.create_conversation_with_query(query=query)
+    try:
+        cid, response = bot.create_conversation_with_query(query=query)
+    except openai.error.RateLimitError:
+        return Response(content="OpenAI's server are currently overloaded. Please try again later.", status_code=400)
 
     return {
         "conversation_id": cid,
@@ -256,12 +269,24 @@ async def create_conversation_handler(request: Request):
 async def continue_conversation_handler(request: Request):
     request_json = await request.json()
 
+    if "bot_id" not in request_json:
+        return Response(content="bot_id must be specified.", status_code=400)
+    if "conversation_id" not in request_json:
+        return Response(content="conversation_id must be specified.", status_code=400)
+    if "query" not in request_json:
+        return Response(content="query must be specified.", status_code=400)
+
     bot_id = request_json["bot_id"]
     conversation_id = request_json["conversation_id"]
     query = request_json["query"]
 
     bot = QABot(bot_id=bot_id)
-    response = bot.continue_conversation_with_query(conversation_id=conversation_id, query=query)
+    try:
+        response = bot.continue_conversation_with_query(conversation_id=conversation_id, query=query)
+    except ConversationNotFoundError:
+        return Response(content="Conversation not found. Please check `conversation_id`", status_code=400)
+    except openai.error.RateLimitError:
+        return Response(content="OpenAI's server are currently overloaded. Please try again later.", status_code=400)
 
     return {
         "response": response,
