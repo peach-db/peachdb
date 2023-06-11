@@ -110,7 +110,7 @@ Below is a walkthrough for creating a web server for a music recommendation app.
     ```
 
 And that's it! You should now have a publicly available server that can listen to query requests from the user on: <br/>
-`GET <PUBLIC_URL>/query?text='Happy, upbeat summer'&top_k=5`
+`GET <PUBLIC_URL>/query?query_input='Happy, upbeat summer'&modality=text&top_k=5`
 
 ## Use-cases
 - Build web apps like - [clip.audio](https://www.clip.audio/) & [awesome-movies.life](https://awesome-movies.life/)
