@@ -21,7 +21,14 @@ Takes a list of strings (documents) that the question answering bot will answer 
 
 ### Returns
 
-<!-- TODO -->
+- 200 status code on successful bot creation.
+
+#### Errors
+
+- 400:
+  - OpenAI server overload.
+- 500:
+  - Unknown error. Please contact us!
 
 ### Example
 
@@ -40,7 +47,7 @@ Takes a list of strings (documents) that the question answering bot will answer 
 
 #### Output
 
-<!-- TODO -->
+Returns a 200 status code with message "Bot created successfully."
 
 ## 2. Start a conversation
 `POST /create-conversation`
@@ -56,7 +63,17 @@ To continue the conversation, a `conversation_id` is returned which can be used 
 
 ### Returns
 
-<!-- TODO -->
+1. `conversation_id`: A unique ID for a conversation with a given user and start query. Can be used to continue the conversation while preserving context from all intermediary back-and-forths.
+2. `response`: The return from the chatbot for the given query.
+
+#### Errors
+
+- 400:
+    - `bot_id` not specified
+    - `query` not specified
+    - OpenAI server overloaded
+- 500:
+    - Unknown error. Please contact us!
 
 ### Example
 
@@ -70,7 +87,12 @@ To continue the conversation, a `conversation_id` is returned which can be used 
 
 #### Output
 
-<!-- TODO -->
+```json
+{
+    "conversation_id": "e79204a6-a458-4710-9e83-2d5fa58fbf52",
+    "response": "The 1880 Greenback Party National Convention convened in Chicago."
+}
+```
 
 ## 3. Continue a conversation
 `POST /continue-conversation`
@@ -85,8 +107,18 @@ Continues a user conversation started in `create-conversation`. As more queries 
 
 ### Returns
 
-<!-- TODO -->
+1. `response`: Response to the given user query taking all previous interactions into account.
 
+#### Errors
+
+- 400:
+    - `bot_id` not provided
+    - `conversation_id` not provided
+    - `query` not provided
+    - Wrong conversation ID provided.
+    - OpenAI servers overloaded
+- 500:
+    - Unknown error. Please contact us!
 ### Example
 
 #### Input
@@ -101,4 +133,8 @@ Continues a user conversation started in `create-conversation`. As more queries 
 
 #### Output
 
-<!-- TODO -->
+```json
+{
+    "response": "The vice presidential nominee for the Greenback Party in the 1880 United States presidential election was Barzillai J. Chambers of Texas."
+}
+```
