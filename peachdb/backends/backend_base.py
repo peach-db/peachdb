@@ -1,6 +1,7 @@
 import abc
 import dataclasses
 import os
+from typing import Optional
 
 import duckdb
 import numpy as np
@@ -10,6 +11,7 @@ from rich import print
 import peachdb.embedder.models.base
 from peachdb.embedder.models.multimodal_imagebind import ImageBindModel
 from peachdb.embedder.models.sentence_transformer import SentenceTransformerModel
+from peachdb.embedder.openai_ada import OpenAIAdaEmbedder
 from peachdb.embedder.utils import Modality, S3File, S3Folder, is_s3_uri
 
 
@@ -39,15 +41,18 @@ class BackendBase(abc.ABC):
         self._id_column_name = id_column_name
         self._metadata_filepath = self._get_metadata_filepath(metadata_path)
         self._modality = modality
+        self._embedding_generator = embedding_generator
 
         self._embeddings, self._ids = self._get_embeddings(embeddings_dir)
         if len(set(self._ids)) != len(self._ids):
             raise ValueError("Duplicate ids found in the embeddings file.")
 
-        if embedding_generator == "sentence_transformer_L12":
+        if self._embedding_generator == "sentence_transformer_L12":
             self._encoder: peachdb.embedder.models.base.BaseModel = SentenceTransformerModel()
-        elif embedding_generator == "imagebind":
+        elif self._embedding_generator == "imagebind":
             self._encoder = ImageBindModel()
+        elif self._embedding_generator == "openai_ada":
+            self._openai_encoder = OpenAIAdaEmbedder()
         else:
             raise ValueError(f"Unknown embedding generator: {embedding_generator}")
 
@@ -57,23 +62,32 @@ class BackendBase(abc.ABC):
 
     def process_query(self, query: str, modality: Modality, top_k: int = 5) -> tuple:
         print("Embedding query...")
-        if modality == Modality.TEXT:
-            query_embedding = self._encoder.encode_texts(texts=[query], batch_size=1, show_progress_bar=True)
-        elif modality == Modality.AUDIO:
-            query_embedding = self._encoder.encode_audio(local_paths=[query], batch_size=1, show_progress_bar=True)
-        elif modality == Modality.IMAGE:
-            query_embedding = self._encoder.encode_image(local_paths=[query], batch_size=1, show_progress_bar=True)
+        if self._embedding_generator == "openai_ada":
+            assert modality == Modality.TEXT
+            query_embedding = np.asarray(self._openai_encoder.calculate_embeddings([query])[0:1])
+            return self._process_query(query_embedding, top_k)
         else:
-            raise ValueError(f"Unknown modality: {modality}")
+            if modality == Modality.TEXT:
+                query_embedding = self._encoder.encode_texts(texts=[query], batch_size=1, show_progress_bar=True)
+            elif modality == Modality.AUDIO:
+                query_embedding = self._encoder.encode_audio(local_paths=[query], batch_size=1, show_progress_bar=True)
+            elif modality == Modality.IMAGE:
+                query_embedding = self._encoder.encode_image(local_paths=[query], batch_size=1, show_progress_bar=True)
+            else:
+                raise ValueError(f"Unknown modality: {modality}")
 
-        return self._process_query(query_embedding, top_k)
+            return self._process_query(query_embedding, top_k)
 
-    def fetch_metadata(self, ids) -> pd.DataFrame:
+    def fetch_metadata(self, ids, namespace: Optional[str]) -> pd.DataFrame:
         print("Fetching metadata...")
 
-        data = duckdb.read_csv(self._metadata_filepath)
-        id_str = " OR ".join([f"{self._id_column_name} = {id}" for id in ids])
-        metadata = duckdb.sql(f"SELECT * FROM data WHERE {id_str}").df()
+        # NOTE: this is a hack, as we keep updating the metadata.
+        data = duckdb.read_csv(self._metadata_filepath, header=True)
+        id_str = " OR ".join([f"{self._id_column_name} = '{id}'" for id in ids])
+        if namespace is None:
+            metadata = duckdb.sql(f"SELECT * FROM data WHERE {id_str}").df()
+        else:
+            metadata = duckdb.sql(f"SELECT * FROM data WHERE ({id_str}) AND (namespace = '{namespace}')").df()
 
         return metadata
 
@@ -102,7 +116,7 @@ class BackendBase(abc.ABC):
             embeddings = np.array(df["image_embeddings"].values.tolist()).astype("float32")
         else:
             raise ValueError(f"Unknown modality: {self._modality}")
-        ids = np.array(df["ids"].values.tolist()).astype("int64")
+        ids = np.asarray(df["ids"].apply(str).values.tolist())
         return embeddings, ids
 
     def _get_metadata_filepath(self, metadata_path: str) -> str:

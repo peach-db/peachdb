@@ -21,3 +21,4 @@ peachdb-imagebind
 mypy
 pandas-stubs
 types-requests
+openai

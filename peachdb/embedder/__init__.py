@@ -4,6 +4,9 @@ from collections import namedtuple
 from typing import List, Optional, Type
 
 import duckdb
+import modal
+import pandas as pd
+import pyarrow as pa  # type: ignore
 import pyarrow.parquet as pq  # type: ignore
 from rich import print
 
@@ -24,6 +27,7 @@ class EmbeddingProcessor:
         embedding_model_name: str,
         project_name: str,
         modality: Modality,
+        namespace: Optional[str] = None,
         embeddings_output_s3_bucket_uri: Optional[str] = None,
         max_rows: Optional[int] = None,
     ):
@@ -36,15 +40,16 @@ class EmbeddingProcessor:
         self._embeddings_output_s3_bucket_uri = (
             embeddings_output_s3_bucket_uri.strip("/") + "/" if embeddings_output_s3_bucket_uri else None
         )
+        self._namespace = namespace
         self._modality = modality
 
         if self._embedding_model_name == "sentence_transformer_L12":
             from peachdb.embedder.containers.sentence_transformer import SentenceTransformerEmbedder, sbert_stub
 
-            self._embedding_model: Type[
-                peachdb.embedder.containers.base.EmbeddingModelBase
+            self._embedding_model: Optional[
+                Type[peachdb.embedder.containers.base.EmbeddingModelBase]
             ] = SentenceTransformerEmbedder
-            self._embedding_model_stub = sbert_stub
+            self._embedding_model_stub: Optional[modal.Stub] = sbert_stub
             self._embedding_model_chunk_size = 10000
         elif self._embedding_model_name == "imagebind":
             from peachdb.embedder.containers.multimodal_imagebind import ImageBindEmbdedder, imagebind_stub
@@ -52,15 +57,24 @@ class EmbeddingProcessor:
             self._embedding_model = ImageBindEmbdedder
             self._embedding_model_stub = imagebind_stub
             self._embedding_model_chunk_size = 1000
+        elif self._embedding_model_name == "openai_ada":
+            from peachdb.embedder.openai_ada import OpenAIAdaEmbedder
+
+            self._embedding_model = None
+            self._embedding_model_stub = None
+            # TODO: use this
+            self._embedding_model_chunk_size = 1000
+            self._openai_ada_embedder = OpenAIAdaEmbedder()
+
         else:
             raise ValueError(f"Invalid embedding model name: {self._embedding_model_name}")
 
     @property
     def embeddings_output_dir(self):
         if is_s3_uri(self._csv_path):
-            return f"{self._embeddings_output_s3_bucket_uri}{self._project_name}/embeddings"
+            return f"{self._embeddings_output_s3_bucket_uri}{self._project_name}/embeddings/{self._namespace}"
 
-        dir = f"{BLOB_STORE}/{self._project_name}/embeddings"
+        dir = f"{BLOB_STORE}/{self._project_name}/embeddings/{self._namespace}"
         os.makedirs(dir, exist_ok=True)
         return dir
 
@@ -82,7 +96,7 @@ class EmbeddingProcessor:
             os.makedirs(project_blob_dir, exist_ok=True)
 
             fname = self._csv_path.split("/")[-1]
-            dataset_path = f"{project_blob_dir}/{fname}"
+            dataset_path = f"{project_blob_dir}/{self._namespace}_{fname}"
             shutil.copy2(self._csv_path, dataset_path)
             return self._read_dataset(dataset_path)
         else:
@@ -110,33 +124,56 @@ class EmbeddingProcessor:
             ids = []
             for text_or_path, id in chunk:
                 texts_or_paths.append(text_or_path)
-                ids.append(id)
+                ids.append(str(id))
             inputs += [Chunk(texts_or_paths, ids)]
 
         return inputs
 
     def _run_model(self, chunks: List[Chunk]):
-        with self._embedding_model_stub.run():
-            st = self._embedding_model()
+        if self._embedding_model_name == "openai_ada":
+            assert not is_s3_uri(self._csv_path)
+            assert self._modality == Modality.TEXT
 
-            fname = self._csv_path.split("/")[-1].split(".")[0]
-            input_tuples = [
-                # expected: (ids, output_path, texts, audio_paths, image_paths, show_progress)
-                (
-                    chunk.ids,
-                    f"{self.embeddings_output_dir}/{fname}_{idx}_{self._embedding_model_name}.parquet",
-                    # TODO: enable support of using multiple modalities at the same time here (#multi-modality)
-                    chunk.texts_or_paths if self._modality == Modality.TEXT else None,
-                    chunk.texts_or_paths if self._modality == Modality.AUDIO else None,
-                    chunk.texts_or_paths if self._modality == Modality.IMAGE else None,
-                    True,
+            for idx, chunk in enumerate(chunks):
+                embeddings_dict = {}
+                embeddings_dict["ids"] = chunk.ids
+                embeddings_dict["text_embeddings"] = self._openai_ada_embedder.calculate_embeddings(
+                    chunk.texts_or_paths
                 )
-                for idx, chunk in enumerate(chunks)
-            ]
-            results = list(st.calculate_embeddings.starmap(input_tuples))  # type: ignore
+                df = pd.DataFrame(embeddings_dict)
+                result = pa.Table.from_pandas(df)
 
-            if not is_s3_uri(self._csv_path):
-                for idx, result in enumerate(results):
-                    pq.write_table(
-                        result, f"{self.embeddings_output_dir}/{fname}_{idx}_{self._embedding_model_name}.parquet"
+                fname = self._csv_path.split("/")[-1].split(".")[0]
+                pq.write_table(
+                    result, f"{self.embeddings_output_dir}/{fname}_{idx}_{self._embedding_model_name}.parquet"
+                )
+
+        else:
+            assert self._embedding_model_stub is not None and self._embedding_model is not None
+
+            with self._embedding_model_stub.run():
+                st = self._embedding_model()
+
+                # NOTE: a unique fname here is being used to avoid conflicts in the stored data!
+                # Be careful about changing this logic.
+                fname = self._csv_path.split("/")[-1].split(".")[0]
+                input_tuples = [
+                    # expected: (ids, output_path, texts, audio_paths, image_paths, show_progress)
+                    (
+                        chunk.ids,
+                        f"{self.embeddings_output_dir}/{fname}_{idx}_{self._embedding_model_name}.parquet",
+                        # TODO: enable support of using multiple modalities at the same time here (#multi-modality)
+                        chunk.texts_or_paths if self._modality == Modality.TEXT else None,
+                        chunk.texts_or_paths if self._modality == Modality.AUDIO else None,
+                        chunk.texts_or_paths if self._modality == Modality.IMAGE else None,
+                        True,
                     )
+                    for idx, chunk in enumerate(chunks)
+                ]
+                results = list(st.calculate_embeddings.starmap(input_tuples))  # type: ignore
+
+                if not is_s3_uri(self._csv_path):
+                    for idx, result in enumerate(results):
+                        pq.write_table(
+                            result, f"{self.embeddings_output_dir}/{fname}_{idx}_{self._embedding_model_name}.parquet"
+                        )
