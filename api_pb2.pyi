@@ -22,14 +22,18 @@ class ContinueConversationResponse(_message.Message):
     def __init__(self, response: _Optional[str] = ...) -> None: ...
 
 class CreateBotRequest(_message.Message):
-    __slots__ = ["bot_id", "documents", "system_prompt"]
+    __slots__ = ["bot_id", "documents", "embedding_model_name", "llm_model_name", "system_prompt"]
     BOT_ID_FIELD_NUMBER: _ClassVar[int]
     DOCUMENTS_FIELD_NUMBER: _ClassVar[int]
+    EMBEDDING_MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
+    LLM_MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
     SYSTEM_PROMPT_FIELD_NUMBER: _ClassVar[int]
     bot_id: str
     documents: _containers.RepeatedScalarFieldContainer[str]
+    embedding_model_name: str
+    llm_model_name: str
     system_prompt: str
-    def __init__(self, bot_id: _Optional[str] = ..., system_prompt: _Optional[str] = ..., documents: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, bot_id: _Optional[str] = ..., system_prompt: _Optional[str] = ..., documents: _Optional[_Iterable[str]] = ..., llm_model_name: _Optional[str] = ..., embedding_model_name: _Optional[str] = ...) -> None: ...
 
 class CreateBotResponse(_message.Message):
     __slots__ = ["status"]

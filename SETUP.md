@@ -16,3 +16,9 @@ For Mac, had to additionally run,
 pip uninstall grpcio
 conda install grpcio
 ```
+
+# Deployment
+
+```bash
+ngrok tcp --region=us --remote-addr=1.tcp.ngrok.io:24448 50051
+```

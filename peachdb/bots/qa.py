@@ -97,11 +97,11 @@ class QABot:
         with shelve.open(BOTS_DB) as db:
             if bot_id in db:
                 if system_prompt is not None:
-                    raise BadBotInputError("System prompt cannot be changed for existing bot.")
+                    raise BadBotInputError("System prompt cannot be changed for existing bot. Maybe you want to create a new bot?")
                 if embedding_model is not None:
-                    raise BadBotInputError("Embedding model cannot be changed for existing bot.")
+                    raise BadBotInputError("Embedding model cannot be changed for existing bot. Maybe you want to create a new bot?")
                 if llm_model_name is not None:
-                    raise BadBotInputError("LLM model cannot be changed for existing bot.")
+                    raise BadBotInputError("LLM model cannot be changed for existing bot. Maybe you want to create a new bot?")
                 self._peachdb_project_id = db[bot_id]["peachdb_project_id"]
                 self._embedding_model = db[bot_id]["embedding_model"]
                 self._llm_model_name = db[bot_id]["llm_model_name"]
