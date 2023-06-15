@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package peachdb;
+
+// The service definition
+service BotService {
+  rpc CreateBot (CreateBotRequest) returns (CreateBotResponse) {}
+  rpc CreateConversation (CreateConversationRequest) returns (stream CreateConversationResponse) {}
+  rpc ContinueConversation (ContinueConversationRequest) returns (stream ContinueConversationResponse) {}
+}
+
+// The request message containing the client's info for creating a bot
+message CreateBotRequest {
+  string bot_id = 1;
+  string system_prompt = 2;
+  repeated string documents = 3;
+}
+
+// The response message containing the bot's info
+message CreateBotResponse {
+  string status = 1;
+}
+
+// The request message containing the client's info for starting a conversation
+message CreateConversationRequest {
+  string bot_id = 1;
+  string query = 2;
+}
+
+// The response message containing the chatbot's reply to a query
+message CreateConversationResponse {
+  string conversation_id = 1;
+  string response = 2;
+}
+
+// The request message containing the client's info for continuing a conversation
+message ContinueConversationRequest {
+  string bot_id = 1;
+  string conversation_id = 2;
+  string query = 3;
+}
+
+// The response message containing the chatbot's reply to a query
+message ContinueConversationResponse {
+  string response = 1;
+}
