@@ -82,6 +82,10 @@ def _peachdb_upsert_wrapper(peach_db_instance, peach_db_project_name: str, names
     return True
 
 
+class BadBotInputError(ValueError):
+    pass
+
+
 class QABot:
     def __init__(
         self,
@@ -92,17 +96,23 @@ class QABot:
     ):
         with shelve.open(BOTS_DB) as db:
             if bot_id in db:
-                assert system_prompt is None, "System prompt cannot be changed for existing bot."
-                assert embedding_model is None, "Embedding model cannot be changed for existing bot."
-                assert llm_model_name is None, "LLM model cannot be changed for existing bot."
+                if system_prompt is not None:
+                    raise BadBotInputError("System prompt cannot be changed for existing bot.")
+                if embedding_model is not None:
+                    raise BadBotInputError("Embedding model cannot be changed for existing bot.")
+                if llm_model_name is not None:
+                    raise BadBotInputError("LLM model cannot be changed for existing bot.")
                 self._peachdb_project_id = db[bot_id]["peachdb_project_id"]
                 self._embedding_model = db[bot_id]["embedding_model"]
                 self._llm_model_name = db[bot_id]["llm_model_name"]
                 self._system_prompt = db[bot_id]["system_prompt"]
             else:
-                assert system_prompt is not None, "System prompt must be specified for new bot."
-                assert embedding_model is not None, "Embedding model must be specified for new bot."
-                assert llm_model_name is not None, "LLM model must be specified for new bot."
+                if system_prompt is None:
+                    raise BadBotInputError("System prompt must be specified for new bot.")
+                if embedding_model is None:
+                    raise BadBotInputError("Embedding model must be specified for new bot.")
+                if llm_model_name is None:
+                    raise BadBotInputError("LLM model must be specified for new bot.")
 
                 self._peachdb_project_id = f"{uuid4()}_{bot_id}"
                 self._embedding_model = embedding_model

@@ -11,11 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import Response
 from pydantic import BaseModel
-from pyngrok import ngrok  # type: ignore
 from rich import print
 
 from peachdb import EmptyNamespace, PeachDB
-from peachdb.bots.qa import ConversationNotFoundError, QABot
+from peachdb.bots.qa import BadBotInputError, ConversationNotFoundError, QABot
 from peachdb.constants import SHELVE_DB
 
 app = FastAPI()
@@ -225,15 +224,17 @@ async def query_embeddings_handler(request: Request):
 async def create_bot_handler(request: Request):
     try:
         request_json = await request.json()
-
-        bot = QABot(
-            bot_id=request_json["bot_id"],
-            system_prompt=request_json["system_prompt"],
-            llm_model_name=request_json["llm_model_name"] if "llm_model_name" in request_json else "gpt-3.5-turbo",
-            embedding_model=request_json["embedding_model_name"]
-            if "embedding_model_name" in request_json
-            else "openai_ada",
-        )
+        try:
+            bot = QABot(
+                bot_id=request_json["bot_id"],
+                system_prompt=request_json["system_prompt"],
+                llm_model_name=request_json["llm_model_name"] if "llm_model_name" in request_json else "gpt-3.5-turbo",
+                embedding_model=request_json["embedding_model_name"]
+                if "embedding_model_name" in request_json
+                else "openai_ada",
+            )
+        except BadBotInputError as e:
+            return Response(content=str(e), status_code=400)
 
         try:
             bot.add_data(documents=request_json["documents"])
@@ -242,6 +243,8 @@ async def create_bot_handler(request: Request):
             return Response(
                 content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
             )
+        except openai.error.AuthenticationError:
+            return Response(content="There's been an authentication error. Please contact the team.", status_code=400)
     except Exception as e:
         return Response(content="An unknown error occured. Please contact the team.", status_code=500)
 
@@ -311,6 +314,4 @@ async def continue_conversation_handler(request: Request):
 
 if __name__ == "__main__":
     port = 8000
-    url = ngrok.connect(port)
-    print(f"[green]Public URL: {url}[/green]")
     uvicorn.run("deploy_api:app", host="0.0.0.0", port=port)  # , reload=True)
