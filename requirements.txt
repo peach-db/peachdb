@@ -24,3 +24,4 @@ types-requests
 openai
 grpcio-tools
 types-protobuf
+websockets

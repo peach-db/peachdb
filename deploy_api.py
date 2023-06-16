@@ -1,12 +1,13 @@
 import os
 import shelve
 import tempfile
+import traceback
 from uuid import uuid4
 
 import openai
 import pandas as pd
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import Response
@@ -92,20 +93,7 @@ def _process_input_data(request_json: dict) -> pd.DataFrame:
     return df
 
 
-def http_error_handle(fn):
-    def wrapper(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except Exception as e:
-            return Response(content="An unknown error occured. Please contact the PeachDB team.", status_code=500)
-
-    return wrapper
-
-
-# TODO: we need an init that figures out which model to use?
 @app.post("/upsert-text")
-# TODO: make below decorator work.
-# @http_error_handle()
 async def upsert_handler(request: Request):
     """
     Takes texts as input rather than vectors (unlike Pinecone).
@@ -245,6 +233,10 @@ async def create_bot_handler(request: Request):
             )
         except openai.error.AuthenticationError:
             return Response(content="There's been an authentication error. Please contact the team.", status_code=400)
+        except openai.error.ServiceUnavailableError:
+            return Response(
+                content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
+            )
     except Exception as e:
         return Response(content="An unknown error occured. Please contact the team.", status_code=500)
 
@@ -270,6 +262,10 @@ async def create_conversation_handler(request: Request):
             return Response(
                 content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
             )
+        except openai.error.ServiceUnavailableError:
+            return Response(
+                content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
+            )
 
         return {
             "conversation_id": cid,
@@ -278,6 +274,39 @@ async def create_conversation_handler(request: Request):
     except Exception as e:
         return Response(content="An unknown error occured. Please contact the team.", status_code=500)
 
+@app.websocket_route("/ws-create-conversation")
+async def ws_create_conversation_handler(websocket: WebSocket):
+    try:
+        await websocket.accept()
+        request_json = await websocket.receive_json()
+
+        if "bot_id" not in request_json:
+            await websocket.close(reason="bot_id must be specified.", code=1003)
+
+        if "query" not in request_json:
+            await websocket.close(reason="query must be specified.", code=1003)
+
+        bot_id = request_json["bot_id"]
+        query = request_json["query"]
+
+        try:
+            bot = QABot(bot_id=bot_id)
+            # TODO: fix type error below.
+            for (cid, response) in bot.create_conversation_with_query(query=query, stream=True): # type: ignore
+                await websocket.send_json({
+                    "conversation_id": cid,
+                    "response": response,
+                })
+        except openai.error.RateLimitError:
+            await websocket.close(reason="OpenAI's server are currently overloaded. Please try again later.", code=1003)
+        except BadBotInputError as e:
+            await websocket.close(reason=str(e), code=1003)
+        # TODO: add below error message to add endpoints... Can we handle all these exceptions together somehow?
+        except openai.error.ServiceUnavailableError:
+            await websocket.close(reason="OpenAI's server are currently overloaded. Please try again later.", code=1003)
+    except Exception as e:
+        await websocket.close(reason="An unknown error occured. Please contact the team.", code=1003)
+        traceback.print_exc()
 
 @app.post("/continue-conversation")
 async def continue_conversation_handler(request: Request):
@@ -304,12 +333,51 @@ async def continue_conversation_handler(request: Request):
             return Response(
                 content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
             )
+        except openai.error.ServiceUnavailableError:
+            return Response(
+                content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
+            )
 
         return {
             "response": response,
         }
     except Exception as e:
         return Response(content="An unknown error occured. Please contact the team.", status_code=500)
+
+@app.websocket_route("/ws-continue-conversation")
+async def ws_continue_conversation_handler(websocket: WebSocket):
+    try:
+        await websocket.accept()
+        request_json = await websocket.receive_json()
+
+        if "bot_id" not in request_json:
+            await websocket.close(reason="bot_id must be specified.", code=1003)
+        if "conversation_id" not in request_json:
+            await websocket.close(reason="conversation_id must be specified.", code=1003)
+        if "query" not in request_json:
+            await websocket.close(reason="query must be specified.", code=1003)
+
+        bot_id = request_json["bot_id"]
+        conversation_id = request_json["conversation_id"]
+        query = request_json["query"]
+
+        bot = QABot(bot_id=bot_id)
+        try:
+            for response in bot.continue_conversation_with_query(conversation_id=conversation_id, query=query, stream=True):
+                await websocket.send_json({
+                    "response": response,
+                })
+        except ConversationNotFoundError:
+            await websocket.close(reason="Conversation not found. Please check `conversation_id`", code=1003)
+        except openai.error.RateLimitError:
+            await websocket.close(reason="OpenAI's server are currently overloaded. Please try again later.", code=1003)
+        # TODO: add below error message to add endpoints... Can we handle all these exceptions together somehow?
+        except openai.error.ServiceUnavailableError:
+            await websocket.close(reason="OpenAI's server are currently overloaded. Please try again later.", code=1003)
+
+    except Exception as e:
+        await websocket.close(reason="An unknown error occured. Please contact the team.", code=1003)
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

@@ -208,6 +208,8 @@ temp_draft.py
 multimodality_example.py
 **.flac
 **.jpg
+run_bot.py
+async_openai.py
 
 dataset/
 test.py
