@@ -170,6 +170,8 @@ There is an active server running behing `wss://api.peachdb.app` with the follow
 1. `ws-create-conversation` - same as `/create-conversation` except the HTTP body is expected as the first message to the socket. The socket streams the output as a result.
 2. `ws-continue-conversation` - same as `/continue-conversation` with the same modifications as for `/ws-create-conversation`.
 
+Note that you must `create-bot` first, and this can be done via the HTTPS endpoint (there is no webSocket endpoint as streaming is not required here).
+
 ## gRPC / streaming
 
 There is an active server running behing `1.tcp.ngrok.io:24448` with the gRPC proto file as specified in `peachdb_grpc/api.proto`.
