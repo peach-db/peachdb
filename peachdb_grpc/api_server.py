@@ -9,11 +9,11 @@ import functools
 import traceback
 from typing import AsyncIterable, Iterator
 
+import api_pb2 as api_pb2
+import api_pb2_grpc as api_pb2_grpc
 import grpc  # type: ignore
 import openai
 
-import api_pb2
-import api_pb2_grpc
 from peachdb.bots.qa import BadBotInputError, ConversationNotFoundError, QABot, UnexpectedGPTRoleResponse
 
 

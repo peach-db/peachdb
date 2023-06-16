@@ -16,7 +16,9 @@ class ContinueConversationRequest(_message.Message):
     bot_id: str
     conversation_id: str
     query: str
-    def __init__(self, bot_id: _Optional[str] = ..., conversation_id: _Optional[str] = ..., query: _Optional[str] = ...) -> None: ...
+    def __init__(
+        self, bot_id: _Optional[str] = ..., conversation_id: _Optional[str] = ..., query: _Optional[str] = ...
+    ) -> None: ...
 
 class ContinueConversationResponse(_message.Message):
     __slots__ = ["response"]
@@ -36,7 +38,14 @@ class CreateBotRequest(_message.Message):
     embedding_model_name: str
     llm_model_name: str
     system_prompt: str
-    def __init__(self, bot_id: _Optional[str] = ..., system_prompt: _Optional[str] = ..., documents: _Optional[_Iterable[str]] = ..., llm_model_name: _Optional[str] = ..., embedding_model_name: _Optional[str] = ...) -> None: ...
+    def __init__(
+        self,
+        bot_id: _Optional[str] = ...,
+        system_prompt: _Optional[str] = ...,
+        documents: _Optional[_Iterable[str]] = ...,
+        llm_model_name: _Optional[str] = ...,
+        embedding_model_name: _Optional[str] = ...,
+    ) -> None: ...
 
 class CreateBotResponse(_message.Message):
     __slots__ = ["status"]

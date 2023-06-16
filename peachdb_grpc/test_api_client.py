@@ -1,9 +1,8 @@
 import asyncio
 
-import grpc  # type: ignore
-
 import api_pb2
 import api_pb2_grpc
+import grpc  # type: ignore
 
 
 def create_bot(stub: api_pb2_grpc.BotServiceStub):
