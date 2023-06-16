@@ -9,7 +9,14 @@ Easily build chatbots that:
 - Can better retrieve relevant information by finetuning the embeddings model.
 
 
-## Endpoints
+# Endpoints
+
+We provide the following endpoints:
+1. HTTPS / non-streaming
+2. gRPC / streaming
+
+
+## HTTPS / non-streaming
 
 Endpoints to manage bots, and conversation with bots. A "bot" is a chatbot that answers the users questions over a list of strings (called "document"s) by performing embedding-based search to inject the most relevant documents into the prompt.
 
@@ -17,31 +24,31 @@ Endpoints to manage bots, and conversation with bots. A "bot" is a chatbot that 
 2. POST /create-conversation
 3. POST /continue-conversation
 
-## 1. Create a bot 
+### 1. Create a bot 
 `POST /create-bot`
 
 Takes a list of strings (documents) that the question answering bot will answer questions about.
 
-### Parameters
+#### Parameters
 
 - `bot_id` (string): A unique ID for the bot that will be used to interact with this bot.
 - `system_prompt` (string): The prompt injected at the beginning of any conversation. Could be used to inject information about what the whole collection of documents is about. 
 - `documents` (list of strings): The bot will answer questions about these documents. On user interaction, a portion of the documents related to the users query will be used to answer their questions.
 
-### Returns
+#### Returns
 
 - 200 status code on successful bot creation.
 
-#### Errors
+##### Errors
 
 - 400:
   - OpenAI server overload.
 - 500:
   - Unknown error. Please contact us!
 
-### Example
+#### Example
 
-#### Input
+##### Input
 
 ```json
 {
@@ -54,28 +61,28 @@ Takes a list of strings (documents) that the question answering bot will answer 
 }
 ```
 
-#### Output
+##### Output
 
 Returns a 200 status code with message "Bot created successfully."
 
-## 2. Start a conversation
+### 2. Start a conversation
 `POST /create-conversation`
 
 Given a bot (that abstracts documents and an agent over it), this end-point starts a conversations with a given user query/question. The query/question is used to decide which subset of the documents will also be used to reply to any further input received by the user as part of this conversation.
 
 To continue the conversation, a `conversation_id` is returned which can be used with the `continue-conversation` end-point.
 
-### Parameters
+#### Parameters
 
 1. `bot_id`: The unique bot ID used in `/create-bot`.
 2. `query`: The query from the user who wants to interact with the bot.
 
-### Returns
+#### Returns
 
 1. `conversation_id`: A unique ID for a conversation with a given user and start query. Can be used to continue the conversation while preserving context from all intermediary back-and-forths.
 2. `response`: The return from the chatbot for the given query.
 
-#### Errors
+##### Errors
 
 - 400:
     - `bot_id` not specified
@@ -84,9 +91,9 @@ To continue the conversation, a `conversation_id` is returned which can be used 
 - 500:
     - Unknown error. Please contact us!
 
-### Example
+#### Example
 
-#### Input
+##### Input
 ```json
 {
     "bot_id": "postman_3",
@@ -94,7 +101,7 @@ To continue the conversation, a `conversation_id` is returned which can be used 
 }
 ```
 
-#### Output
+##### Output
 
 ```json
 {
@@ -103,22 +110,22 @@ To continue the conversation, a `conversation_id` is returned which can be used 
 }
 ```
 
-## 3. Continue a conversation
+### 3. Continue a conversation
 `POST /continue-conversation`
 
 Continues a user conversation started in `create-conversation`. As more queries as sent to this endpoint, the state of the previous queries is used and maintained.
 
-### Parameters
+#### Parameters
 
 1. `bot_id`: The unique bot ID used in /create-bot.
 2. `conversation_id`: The ID returned by `/create-conversation` endpoint.
 3. `query`: End-user query to continue the conversation.
 
-### Returns
+#### Returns
 
 1. `response`: Response to the given user query taking all previous interactions into account.
 
-#### Errors
+##### Errors
 
 - 400:
     - `bot_id` not provided
@@ -128,9 +135,9 @@ Continues a user conversation started in `create-conversation`. As more queries 
     - OpenAI servers overloaded
 - 500:
     - Unknown error. Please contact us!
-### Example
+#### Example
 
-#### Input
+##### Input
 
 ```json
 {
@@ -140,7 +147,7 @@ Continues a user conversation started in `create-conversation`. As more queries 
 }
 ```
 
-#### Output
+##### Output
 
 ```json
 {
@@ -148,8 +155,18 @@ Continues a user conversation started in `create-conversation`. As more queries 
 }
 ```
 
-## Get Involved
+## gRPC / streaming
+
+There is an active server running behing `1.tcp.ngrok.io:24448` with the gRPC proto file as specified in `peachdb_grpc/api.proto`.
+
+There are 3 RPCs:
+
+1. `CreateBot` - corresponding to `/create-bot`.
+2. `CreateConversation` - corresponding to `/create-conversation` but streams the output.
+3. `ContinueConversation` - corresponding to `/continue-conversation` but streams the output.
+
+# Get Involved
 We welcome PR contributors and ideas for how to improve the project.
 
-## Special Thanks
+# Special Thanks
 To [Modal](https://modal.com/), [DuckDB](https://github.com/duckdb/duckdb) & [pyngrok](https://pypi.org/project/pyngrok/) for developing wonderful services

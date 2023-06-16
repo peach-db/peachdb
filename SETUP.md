@@ -7,6 +7,7 @@ pip install -r requirements.txt
 # gRPC
 
 ```bash
+cd peachdb_grpc
 python -m grpc_tools.protoc -I . --python_out=. --pyi_out=. --grpc_python_out=. api.proto
 ```
 
