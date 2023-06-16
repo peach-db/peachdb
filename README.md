@@ -12,8 +12,8 @@ Easily build chatbots that:
 # Endpoints
 
 We provide the following endpoints:
-1. [HTTPS / non-streaming](https://github.com/peach-db/peachdb/blob/master/README.md#https--non-streaming)
-2. [gRPC / streaming](https://github.com/peach-db/peachdb/blob/master/README.md#grpc--streaming)
+1. [HTTPS / non-streaming](https://github.com/peach-db/peachdb#https--non-streaming)
+2. [gRPC / streaming](https://github.com/peach-db/peachdb#grpc--streaming)
 
 
 ## HTTPS / non-streaming
