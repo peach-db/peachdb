@@ -4,7 +4,7 @@ dotenv.load_dotenv()
 
 import shelve
 import tempfile
-from typing import Optional
+from typing import Iterator, Optional, Union
 from uuid import uuid4
 
 import openai
@@ -97,11 +97,17 @@ class QABot:
         with shelve.open(BOTS_DB) as db:
             if bot_id in db:
                 if system_prompt is not None:
-                    raise BadBotInputError("System prompt cannot be changed for existing bot. Maybe you want to create a new bot?")
+                    raise BadBotInputError(
+                        "System prompt cannot be changed for existing bot. Maybe you want to create a new bot?"
+                    )
                 if embedding_model is not None:
-                    raise BadBotInputError("Embedding model cannot be changed for existing bot. Maybe you want to create a new bot?")
+                    raise BadBotInputError(
+                        "Embedding model cannot be changed for existing bot. Maybe you want to create a new bot?"
+                    )
                 if llm_model_name is not None:
-                    raise BadBotInputError("LLM model cannot be changed for existing bot. Maybe you want to create a new bot?")
+                    raise BadBotInputError(
+                        "LLM model cannot be changed for existing bot. Maybe you want to create a new bot?"
+                    )
                 self._peachdb_project_id = db[bot_id]["peachdb_project_id"]
                 self._embedding_model = db[bot_id]["embedding_model"]
                 self._llm_model_name = db[bot_id]["llm_model_name"]
@@ -135,9 +141,10 @@ class QABot:
         )
 
         if self._llm_model_name in ["gpt-3.5-turbo", "gpt-4"]:
-            self._llm_model = lambda messages: openai.ChatCompletion.create(
+            self._llm_model = lambda messages, stream: openai.ChatCompletion.create(
                 messages=[{"role": "system", "content": self._system_prompt}] + messages,
                 model=self._llm_model_name,
+                stream=stream,
             )
         else:
             raise ValueError(f"Unknown/Unsupported LLM model: {self._llm_model_name}")
@@ -152,8 +159,10 @@ class QABot:
             metadatas_dict=None,
         )
 
-    def create_conversation_with_query(self, query: str, top_k: int = 3) -> tuple[str, str]:
-        context_ids, context_distances, context_metadata = self.peach_db.query(query, top_k=top_k, modality="text")
+    def create_conversation_with_query(
+        self, query: str, top_k: int = 3, stream: bool = False
+    ) -> Union[tuple[str, str], Iterator[tuple[str, str]]]:
+        _, _, context_metadata = self.peach_db.query(query, top_k=top_k, modality="text")
         assert "texts" in context_metadata
 
         contextual_query = "Use the below snippets to answer the subsequent questions. If the answer can't be found, write \"I don't know.\""
@@ -166,17 +175,47 @@ class QABot:
             {"role": "user", "content": contextual_query},
         ]
 
-        response_message = self._llm_model(messages)["choices"][0]["message"]
+        response = self._llm_model(messages=messages, stream=stream)["choices"][0]["message"]
 
-        conversation_id = str(uuid4())
-        with shelve.open(CONVERSATIONS_DB) as db:
-            while conversation_id in db:
-                conversation_id = str(uuid4())
-            db[conversation_id] = messages + [dict(response_message)]
+        if stream:
+            response_str = ""
+            conversation_id = str(uuid4())
 
-        return conversation_id, response_message["content"]
+            for resp in response:
+                delta = resp.choices[0].delta
 
-    def continue_conversation_with_query(self, conversation_id: str, query: str, top_k: int = 3) -> str:
+                if "role" in delta:
+                    if delta.role != "system":
+                        # TODO: handle this.
+                        raise ValueError(f"Expected system response, got {delta.role} response.")
+
+                if "content" in delta:
+                    response_str += delta["content"]
+                    yield conversation_id, delta["content"]
+
+                # keep updating shelve with current conversation.
+                with shelve.open(CONVERSATIONS_DB) as db:
+                    while conversation_id in db:
+                        conversation_id = str(uuid4())
+                    db[conversation_id] = messages + [{"role": "system", "content": response_str}]
+        else:
+            conversation_id = str(uuid4())
+
+            response_message = response.choices[0].message
+            if response_message.role != "system":
+                # TODO: handle this.
+                raise ValueError(f"Expected system response, got {response_message.role} response.")
+
+            with shelve.open(CONVERSATIONS_DB) as db:
+                while conversation_id in db:
+                    conversation_id = str(uuid4())
+                db[conversation_id] = messages + [response_message]
+
+            return conversation_id, response_message["content"]
+
+    def continue_conversation_with_query(
+        self, conversation_id: str, query: str, top_k: int = 3, stream: bool = False
+    ) -> Union[str, Iterator[str]]:
         with shelve.open(CONVERSATIONS_DB) as db:
             if conversation_id not in db:
                 raise ConversationNotFoundError("Conversation ID not found.")
@@ -185,9 +224,32 @@ class QABot:
 
         messages.append({"role": "user", "content": query})
 
-        response_message = self._llm_model(messages)["choices"][0]["message"]
+        response = self._llm_model(messages=messages, stream=stream)["choices"][0]["message"]
 
-        with shelve.open(CONVERSATIONS_DB) as db:
-            db[conversation_id] = messages + [response_message]
+        if stream:
+            response_str = ""
 
-        return response_message["content"]
+            for resp in response:
+                delta = resp.choices[0].delta
+
+                if "role" in delta:
+                    if delta.role != "system":
+                        raise ValueError(f"Expected system response, got {delta.role} response.")
+
+                if "content" in delta:
+                    response_str += delta["content"]
+                    yield delta["content"]
+
+                # keep updating shelve with current conversation.
+                with shelve.open(CONVERSATIONS_DB) as db:
+                    db[conversation_id] = messages + [{"role": "system", "content": response_str}]
+        else:
+            response_message = response.choices[0].message
+            if response_message.role != "system":
+                # TODO: handle this.
+                raise ValueError(f"Expected system response, got {response_message.role} response.")
+
+            with shelve.open(CONVERSATIONS_DB) as db:
+                db[conversation_id] = messages + [response_message]
+
+            return response_message["content"]

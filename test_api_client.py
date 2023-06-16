@@ -9,7 +9,7 @@ import api_pb2_grpc
 def create_bot(stub: api_pb2_grpc.BotServiceStub):
     repsonse = stub.CreateBot(
         api_pb2.CreateBotRequest(
-            bot_id="grpc_test_2", documents=["Hello", "World"], system_prompt="Answer questions about this document."
+            bot_id="grpc_test_3", documents=["Hello", "World"], system_prompt="Answer questions about this document."
         )
     )
 
@@ -18,16 +18,21 @@ def create_bot(stub: api_pb2_grpc.BotServiceStub):
 
 async def create_conversation(stub: api_pb2_grpc.BotServiceStub):
     responses = stub.CreateConversation(
-        api_pb2.CreateConversationRequest(bot_id="grpc_test_2", query="What is this document about?")
+        api_pb2.CreateConversationRequest(bot_id="grpc_test_3", query="What is this document about?")
     )
-    
+
     async for response in responses:
         print("Create conversation response:")
         print(response)
-    
+
+
 async def continue_conversation(stub: api_pb2_grpc.BotServiceStub):
     responses = stub.ContinueConversation(
-        api_pb2.ContinueConversationRequest(bot_id="grpc_test_2", conversation_id="fae52c34-84c2-4d17-aee3-f7afc1f34261", query="What is this document about?")
+        api_pb2.ContinueConversationRequest(
+            bot_id="grpc_test_3",
+            conversation_id="2b95d7e9-316c-476d-ac53-6c28ab7c6a27",
+            query="What is this document about?",
+        )
     )
 
     async for response in responses:
