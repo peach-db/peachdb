@@ -30,7 +30,7 @@ async def continue_conversation(stub: api_pb2_grpc.BotServiceStub):
     responses = stub.ContinueConversation(
         api_pb2.ContinueConversationRequest(
             bot_id="grpc_test_4",
-            conversation_id="0a8c123c-04b9-434e-8a4a-9ce5538f189f",
+            conversation_id="335700eb-0b4b-4094-a317-f03efe71e09e",
             query="What is this document about?",
         )
     )
@@ -47,8 +47,8 @@ async def main() -> None:
         stub = api_pb2_grpc.BotServiceStub(channel)
 
         # print(await create_bot(stub))
-        await create_conversation(stub)
-        # await continue_conversation(stub)
+        # await create_conversation(stub)
+        await continue_conversation(stub)
 
         # await asyncio.gather(
         #     create_conversation(stub),

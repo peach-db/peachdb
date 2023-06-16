@@ -162,6 +162,9 @@ class QABot:
         )
 
     def _llm_response(self, conversation_id: str, messages: list[dict[str, str]], stream: bool = False) -> Union[tuple[str,str], Iterator[tuple[str, str]]]:
+        """
+        Responds to the given messages with the LLM model. Additionally, it appends to the shelve db the current conversation (After response has been returned from GPT).
+        """
         response = self._llm_model(messages=messages, stream=stream)
 
         if stream:
