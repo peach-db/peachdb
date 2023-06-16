@@ -18,11 +18,9 @@ def create_bot(stub: api_pb2_grpc.BotServiceStub):
 
 async def create_conversation(stub: api_pb2_grpc.BotServiceStub):
     responses = stub.CreateConversation(
-        api_pb2.CreateConversationRequest(
-            bot_id="grpc_test_4", 
-            query="What is this document about?")
+        api_pb2.CreateConversationRequest(bot_id="grpc_test_4", query="What is this document about?")
     )
-    
+
     async for response in responses:
         print("Create conversation response:")
         print(response)
@@ -49,8 +47,8 @@ async def main() -> None:
         stub = api_pb2_grpc.BotServiceStub(channel)
 
         # print(await create_bot(stub))
-        # await create_conversation(stub)
-        await continue_conversation(stub)
+        await create_conversation(stub)
+        # await continue_conversation(stub)
 
         # await asyncio.gather(
         #     create_conversation(stub),

@@ -161,6 +161,46 @@ class QABot:
             metadatas_dict=None,
         )
 
+    def _llm_response(self, conversation_id: str, messages: list[dict[str, str]], stream: bool = False) -> Union[tuple[str,str], Iterator[tuple[str, str]]]:
+        response = self._llm_model(messages=messages, stream=stream)
+
+        if stream:
+            response_str = ""
+
+            for resp in response:
+                delta = resp.choices[0].delta
+
+                if "role" in delta:
+                    if delta.role != "assistant":
+                        raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {delta.role} response.")
+
+                if "content" in delta:
+                    response_str += delta["content"]
+                    yield conversation_id, delta["content"]
+
+                # keep updating shelve with current conversation.
+                with shelve.open(CONVERSATIONS_DB) as db:
+                    db[conversation_id] = messages + [{"role": "assistant", "content": response_str}]
+        else:
+            response_message = response.choices[0].message
+            if response_message.role != "assistant":
+                raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
+
+            with shelve.open(CONVERSATIONS_DB) as db:
+                db[conversation_id] = messages + [response_message]
+
+            return conversation_id, response_message["content"]
+        
+    def _create_unique_conversation_id(self) -> str:
+        # get conversation id not in shelve.
+        id = str(uuid4())
+        with shelve.open(CONVERSATIONS_DB) as db:
+            while id in db:
+                id = str(uuid4())
+                
+        return id
+        
+
     def create_conversation_with_query(
         self, query: str, top_k: int = 3, stream: bool = False
     ) -> Union[tuple[str, str], Iterator[tuple[str, str]]]:
@@ -176,42 +216,15 @@ class QABot:
         messages = [
             {"role": "user", "content": contextual_query},
         ]
-
-        response = self._llm_model(messages=messages, stream=stream)
-
+        
+        conversation_id = self._create_unique_conversation_id()
+                
         if stream:
-            response_str = ""
-            conversation_id = str(uuid4())
-
-            for resp in response:
-                delta = resp.choices[0].delta
-
-                if "role" in delta:
-                    if delta.role != "assistant":
-                        raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {delta.role} response.")
-
-                if "content" in delta:
-                    response_str += delta["content"]
-                    yield conversation_id, delta["content"]
-
-                # keep updating shelve with current conversation.
-                with shelve.open(CONVERSATIONS_DB) as db:
-                    while conversation_id in db:
-                        conversation_id = str(uuid4())
-                    db[conversation_id] = messages + [{"role": "assistant", "content": response_str}]
+            for x in self._llm_response(conversation_id, messages, stream=True):
+                yield x
         else:
-            conversation_id = str(uuid4())
-
-            response_message = response.choices[0].message
-            if response_message.role != "assistant":
-                raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
-
-            with shelve.open(CONVERSATIONS_DB) as db:
-                while conversation_id in db:
-                    conversation_id = str(uuid4())
-                db[conversation_id] = messages + [response_message]
-
-            return conversation_id, response_message["content"]
+            return self._llm_response(conversation_id, messages, stream=False)
+        
 
     def continue_conversation_with_query(
         self, conversation_id: str, query: str, top_k: int = 3, stream: bool = False
@@ -224,31 +237,10 @@ class QABot:
 
         messages.append({"role": "user", "content": query})
 
-        response = self._llm_model(messages=messages, stream=stream)
-
         if stream:
-            response_str = ""
-
-            for resp in response:
-                delta = resp.choices[0].delta
-
-                if "role" in delta:
-                    if delta.role != "assistant":
-                        raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {delta.role} response.")
-
-                if "content" in delta:
-                    response_str += delta["content"]
-                    yield delta["content"]
-
-                # keep updating shelve with current conversation.
-                with shelve.open(CONVERSATIONS_DB) as db:
-                    db[conversation_id] = messages + [{"role": "assistant", "content": response_str}]
+            # TODO: fix below type issue.
+            for (_, response) in self._llm_response(conversation_id, messages, stream=True): # type: ignore
+                yield response
         else:
-            response_message = response.choices[0].message
-            if response_message.role != "assistant":
-                raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
-
-            with shelve.open(CONVERSATIONS_DB) as db:
-                db[conversation_id] = messages + [response_message]
-
-            return response_message["content"]
+            _, response = self._llm_response(conversation_id, messages, stream=False)
+            return response
