@@ -17,6 +17,8 @@ from peachdb.constants import BOTS_DB, CONVERSATIONS_DB, SHELVE_DB
 class ConversationNotFoundError(ValueError):
     pass
 
+class UnexpectedGPTRoleResponse(ValueError):
+    pass
 
 def _validate_embedding_model(embedding_model: str):
     assert embedding_model in ["openai_ada"]
@@ -175,7 +177,7 @@ class QABot:
             {"role": "user", "content": contextual_query},
         ]
 
-        response = self._llm_model(messages=messages, stream=stream)["choices"][0]["message"]
+        response = self._llm_model(messages=messages, stream=stream)
 
         if stream:
             response_str = ""
@@ -185,9 +187,9 @@ class QABot:
                 delta = resp.choices[0].delta
 
                 if "role" in delta:
-                    if delta.role != "system":
+                    if delta.role != "assistant":
                         # TODO: handle this.
-                        raise ValueError(f"Expected system response, got {delta.role} response.")
+                        raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {delta.role} response.")
 
                 if "content" in delta:
                     response_str += delta["content"]
@@ -197,14 +199,14 @@ class QABot:
                 with shelve.open(CONVERSATIONS_DB) as db:
                     while conversation_id in db:
                         conversation_id = str(uuid4())
-                    db[conversation_id] = messages + [{"role": "system", "content": response_str}]
+                    db[conversation_id] = messages + [{"role": "assistant", "content": response_str}]
         else:
             conversation_id = str(uuid4())
 
             response_message = response.choices[0].message
-            if response_message.role != "system":
+            if response_message.role != "assistant":
                 # TODO: handle this.
-                raise ValueError(f"Expected system response, got {response_message.role} response.")
+                raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
 
             with shelve.open(CONVERSATIONS_DB) as db:
                 while conversation_id in db:
@@ -224,7 +226,7 @@ class QABot:
 
         messages.append({"role": "user", "content": query})
 
-        response = self._llm_model(messages=messages, stream=stream)["choices"][0]["message"]
+        response = self._llm_model(messages=messages, stream=stream)
 
         if stream:
             response_str = ""
@@ -233,8 +235,8 @@ class QABot:
                 delta = resp.choices[0].delta
 
                 if "role" in delta:
-                    if delta.role != "system":
-                        raise ValueError(f"Expected system response, got {delta.role} response.")
+                    if delta.role != "assistant":
+                        raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {delta.role} response.")
 
                 if "content" in delta:
                     response_str += delta["content"]
@@ -242,12 +244,12 @@ class QABot:
 
                 # keep updating shelve with current conversation.
                 with shelve.open(CONVERSATIONS_DB) as db:
-                    db[conversation_id] = messages + [{"role": "system", "content": response_str}]
+                    db[conversation_id] = messages + [{"role": "assistant", "content": response_str}]
         else:
             response_message = response.choices[0].message
-            if response_message.role != "system":
+            if response_message.role != "assistant":
                 # TODO: handle this.
-                raise ValueError(f"Expected system response, got {response_message.role} response.")
+                raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
 
             with shelve.open(CONVERSATIONS_DB) as db:
                 db[conversation_id] = messages + [response_message]
