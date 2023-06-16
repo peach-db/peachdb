@@ -38,6 +38,10 @@ def grpc_error_handler_async_fn(fn):
             await context.abort(
                 grpc.StatusCode.UNAUTHENTICATED, "There's been an authentication error. Please contact the team."
             )
+        except openai.error.ServiceUnavailableError:
+            await context.abort(
+                grpc.StatusCode.RESOURCE_EXHAUSTED, "OpenAI's servers are currently overloaded. Please try again later."
+            )
         except UnexpectedGPTRoleResponse:
             await context.abort(grpc.StatusCode.INTERNAL, "GPT-3 responded with a role that was not expected.")
         except ConversationNotFoundError:
@@ -66,6 +70,10 @@ def grpc_error_handler_async_gen(fn):
         except BadBotInputError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
         except openai.error.RateLimitError:
+            await context.abort(
+                grpc.StatusCode.RESOURCE_EXHAUSTED, "OpenAI's servers are currently overloaded. Please try again later."
+            )
+        except openai.error.ServiceUnavailableError:
             await context.abort(
                 grpc.StatusCode.RESOURCE_EXHAUSTED, "OpenAI's servers are currently overloaded. Please try again later."
             )
