@@ -188,7 +188,6 @@ class QABot:
 
                 if "role" in delta:
                     if delta.role != "assistant":
-                        # TODO: handle this.
                         raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {delta.role} response.")
 
                 if "content" in delta:
@@ -205,7 +204,6 @@ class QABot:
 
             response_message = response.choices[0].message
             if response_message.role != "assistant":
-                # TODO: handle this.
                 raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
 
             with shelve.open(CONVERSATIONS_DB) as db:
@@ -248,7 +246,6 @@ class QABot:
         else:
             response_message = response.choices[0].message
             if response_message.role != "assistant":
-                # TODO: handle this.
                 raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
 
             with shelve.open(CONVERSATIONS_DB) as db:
