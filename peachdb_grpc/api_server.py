@@ -9,8 +9,8 @@ import functools
 import traceback
 from typing import AsyncIterable, Iterator
 
-import api_pb2 as api_pb2
-import api_pb2_grpc as api_pb2_grpc
+import api_pb2 as api_pb2  # type: ignore
+import api_pb2_grpc as api_pb2_grpc  # type: ignore
 import grpc  # type: ignore
 import openai
 
