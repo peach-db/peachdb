@@ -4,7 +4,7 @@ dotenv.load_dotenv()
 
 import shelve
 import tempfile
-from typing import Optional
+from typing import Iterator, Optional, Union
 from uuid import uuid4
 
 import openai
@@ -17,6 +17,8 @@ from peachdb.constants import BOTS_DB, CONVERSATIONS_DB, SHELVE_DB
 class ConversationNotFoundError(ValueError):
     pass
 
+class UnexpectedGPTRoleResponse(ValueError):
+    pass
 
 def _validate_embedding_model(embedding_model: str):
     assert embedding_model in ["openai_ada"]
@@ -97,11 +99,17 @@ class QABot:
         with shelve.open(BOTS_DB) as db:
             if bot_id in db:
                 if system_prompt is not None:
-                    raise BadBotInputError("System prompt cannot be changed for existing bot.")
+                    raise BadBotInputError(
+                        "System prompt cannot be changed for existing bot. Maybe you want to create a new bot?"
+                    )
                 if embedding_model is not None:
-                    raise BadBotInputError("Embedding model cannot be changed for existing bot.")
+                    raise BadBotInputError(
+                        "Embedding model cannot be changed for existing bot. Maybe you want to create a new bot?"
+                    )
                 if llm_model_name is not None:
-                    raise BadBotInputError("LLM model cannot be changed for existing bot.")
+                    raise BadBotInputError(
+                        "LLM model cannot be changed for existing bot. Maybe you want to create a new bot?"
+                    )
                 self._peachdb_project_id = db[bot_id]["peachdb_project_id"]
                 self._embedding_model = db[bot_id]["embedding_model"]
                 self._llm_model_name = db[bot_id]["llm_model_name"]
@@ -135,9 +143,10 @@ class QABot:
         )
 
         if self._llm_model_name in ["gpt-3.5-turbo", "gpt-4"]:
-            self._llm_model = lambda messages: openai.ChatCompletion.create(
+            self._llm_model = lambda messages, stream: openai.ChatCompletion.create(
                 messages=[{"role": "system", "content": self._system_prompt}] + messages,
                 model=self._llm_model_name,
+                stream=stream,
             )
         else:
             raise ValueError(f"Unknown/Unsupported LLM model: {self._llm_model_name}")
@@ -152,8 +161,53 @@ class QABot:
             metadatas_dict=None,
         )
 
-    def create_conversation_with_query(self, query: str, top_k: int = 3) -> tuple[str, str]:
-        context_ids, context_distances, context_metadata = self.peach_db.query(query, top_k=top_k, modality="text")
+    def _llm_response(self, conversation_id: str, messages: list[dict[str, str]], stream: bool = False) -> Union[tuple[str,str], Iterator[tuple[str, str]]]:
+        """
+        Responds to the given messages with the LLM model. Additionally, it appends to the shelve db the current conversation (After response has been returned from GPT).
+        """
+        response = self._llm_model(messages=messages, stream=stream)
+
+        if stream:
+            response_str = ""
+
+            for resp in response:
+                delta = resp.choices[0].delta
+
+                if "role" in delta:
+                    if delta.role != "assistant":
+                        raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {delta.role} response.")
+
+                if "content" in delta:
+                    response_str += delta["content"]
+                    yield conversation_id, delta["content"]
+
+                # keep updating shelve with current conversation.
+                with shelve.open(CONVERSATIONS_DB) as db:
+                    db[conversation_id] = messages + [{"role": "assistant", "content": response_str}]
+        else:
+            response_message = response.choices[0].message
+            if response_message.role != "assistant":
+                raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
+
+            with shelve.open(CONVERSATIONS_DB) as db:
+                db[conversation_id] = messages + [response_message]
+
+            return conversation_id, response_message["content"]
+        
+    def _create_unique_conversation_id(self) -> str:
+        # get conversation id not in shelve.
+        id = str(uuid4())
+        with shelve.open(CONVERSATIONS_DB) as db:
+            while id in db:
+                id = str(uuid4())
+                
+        return id
+        
+
+    def create_conversation_with_query(
+        self, query: str, top_k: int = 3, stream: bool = False
+    ) -> Union[tuple[str, str], Iterator[tuple[str, str]]]:
+        _, _, context_metadata = self.peach_db.query(query, top_k=top_k, modality="text")
         assert "texts" in context_metadata
 
         contextual_query = "Use the below snippets to answer the subsequent questions. If the answer can't be found, write \"I don't know.\""
@@ -165,18 +219,19 @@ class QABot:
         messages = [
             {"role": "user", "content": contextual_query},
         ]
+        
+        conversation_id = self._create_unique_conversation_id()
+                
+        if stream:
+            for x in self._llm_response(conversation_id, messages, stream=True):
+                yield x
+        else:
+            return self._llm_response(conversation_id, messages, stream=False)
+        
 
-        response_message = self._llm_model(messages)["choices"][0]["message"]
-
-        conversation_id = str(uuid4())
-        with shelve.open(CONVERSATIONS_DB) as db:
-            while conversation_id in db:
-                conversation_id = str(uuid4())
-            db[conversation_id] = messages + [dict(response_message)]
-
-        return conversation_id, response_message["content"]
-
-    def continue_conversation_with_query(self, conversation_id: str, query: str, top_k: int = 3) -> str:
+    def continue_conversation_with_query(
+        self, conversation_id: str, query: str, top_k: int = 3, stream: bool = False
+    ) -> Union[str, Iterator[str]]:
         with shelve.open(CONVERSATIONS_DB) as db:
             if conversation_id not in db:
                 raise ConversationNotFoundError("Conversation ID not found.")
@@ -185,9 +240,10 @@ class QABot:
 
         messages.append({"role": "user", "content": query})
 
-        response_message = self._llm_model(messages)["choices"][0]["message"]
-
-        with shelve.open(CONVERSATIONS_DB) as db:
-            db[conversation_id] = messages + [response_message]
-
-        return response_message["content"]
+        if stream:
+            # TODO: fix below type issue.
+            for (_, response) in self._llm_response(conversation_id, messages, stream=True): # type: ignore
+                yield response
+        else:
+            _, response = self._llm_response(conversation_id, messages, stream=False)
+            return response

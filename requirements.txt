@@ -22,3 +22,5 @@ mypy
 pandas-stubs
 types-requests
 openai
+grpcio-tools
+types-protobuf
