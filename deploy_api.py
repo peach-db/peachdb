@@ -295,7 +295,7 @@ async def ws_create_conversation_handler(websocket: WebSocket):
 
         try:
             bot = QABot(bot_id=bot_id)
-            for cid, response in bot.create_conversation_with_query(query=query, stream=True):  # type: ignore
+            for cid, response in bot.create_conversation_with_query(query=query, stream=True):
                 await websocket.send_json(
                     {
                         "conversation_id": cid,
