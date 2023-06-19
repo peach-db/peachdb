@@ -258,7 +258,8 @@ async def create_conversation_handler(request: Request):
 
         bot = QABot(bot_id=bot_id)
         try:
-            cid, response = bot.create_conversation_with_query(query=query)
+            for cid, response in bot.create_conversation_with_query(query=query):
+                break
         except openai.error.RateLimitError:
             return Response(
                 content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
@@ -294,7 +295,6 @@ async def ws_create_conversation_handler(websocket: WebSocket):
 
         try:
             bot = QABot(bot_id=bot_id)
-            # TODO: fix type error below.
             for cid, response in bot.create_conversation_with_query(query=query, stream=True):  # type: ignore
                 await websocket.send_json(
                     {
@@ -332,7 +332,8 @@ async def continue_conversation_handler(request: Request):
 
         bot = QABot(bot_id=bot_id)
         try:
-            response = bot.continue_conversation_with_query(conversation_id=conversation_id, query=query)
+            for response in bot.continue_conversation_with_query(conversation_id=conversation_id, query=query):
+                break
         except ConversationNotFoundError:
             return Response(content="Conversation not found. Please check `conversation_id`", status_code=400)
         except openai.error.RateLimitError:

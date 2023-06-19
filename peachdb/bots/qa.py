@@ -165,7 +165,7 @@ class QABot:
 
     def _llm_response(
         self, conversation_id: str, messages: list[dict[str, str]], stream: bool = False
-    ) -> Union[tuple[str, str], Iterator[tuple[str, str]]]:
+    ) -> Iterator[tuple[str, str]]:
         """
         Responds to the given messages with the LLM model. Additionally, it appends to the shelve db the current conversation (After response has been returned from GPT).
         """
@@ -189,7 +189,6 @@ class QABot:
                 with shelve.open(CONVERSATIONS_DB) as db:
                     db[conversation_id] = messages + [{"role": "assistant", "content": response_str}]
         else:
-            print(response)
             response_message = response["choices"][0]["message"]
             if response_message.role != "assistant":
                 raise UnexpectedGPTRoleResponse(f"Expected assistant response, got {response_message.role} response.")
@@ -197,8 +196,7 @@ class QABot:
             with shelve.open(CONVERSATIONS_DB) as db:
                 db[conversation_id] = messages + [response_message]
 
-            print(conversation_id, response_message["content"])
-            return conversation_id, response_message["content"]
+            yield conversation_id, response_message["content"]
 
     def _create_unique_conversation_id(self) -> str:
         # get conversation id not in shelve.
@@ -211,7 +209,7 @@ class QABot:
 
     def create_conversation_with_query(
         self, query: str, top_k: int = 3, stream: bool = False
-    ) -> Union[tuple[str, str], Iterator[tuple[str, str]]]:
+    ) -> Iterator[tuple[str, str]]:
         _, _, context_metadata = self.peach_db.query(query, top_k=top_k, modality="text")
         assert "texts" in context_metadata
 
@@ -231,11 +229,12 @@ class QABot:
             for x in self._llm_response(conversation_id, messages, stream=True):
                 yield x
         else:
-            return self._llm_response(conversation_id, messages, stream=False)
+            for x in self._llm_response(conversation_id, messages, stream=False):
+                yield x
 
     def continue_conversation_with_query(
         self, conversation_id: str, query: str, top_k: int = 3, stream: bool = False
-    ) -> Union[str, Iterator[str]]:
+    ) -> Iterator[str]:
         with shelve.open(CONVERSATIONS_DB) as db:
             if conversation_id not in db:
                 raise ConversationNotFoundError("Conversation ID not found.")
@@ -245,9 +244,8 @@ class QABot:
         messages.append({"role": "user", "content": query})
 
         if stream:
-            # TODO: fix below type issue.
-            for _, response in self._llm_response(conversation_id, messages, stream=True):  # type: ignore
+            for _, response in self._llm_response(conversation_id, messages, stream=True):
                 yield response
         else:
-            _, response = self._llm_response(conversation_id, messages, stream=False)
-            return response
+            for _, response in self._llm_response(conversation_id, messages, stream=False):
+                yield response
