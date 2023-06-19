@@ -238,6 +238,7 @@ async def create_bot_handler(request: Request):
                 content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
             )
     except Exception as e:
+        traceback.print_exc()
         return Response(content="An unknown error occured. Please contact the team.", status_code=500)
 
 
@@ -257,7 +258,8 @@ async def create_conversation_handler(request: Request):
 
         bot = QABot(bot_id=bot_id)
         try:
-            cid, response = bot.create_conversation_with_query(query=query)
+            for cid, response in bot.create_conversation_with_query(query=query):
+                break
         except openai.error.RateLimitError:
             return Response(
                 content="OpenAI's server are currently overloaded. Please try again later.", status_code=400
@@ -272,7 +274,9 @@ async def create_conversation_handler(request: Request):
             "response": response,
         }
     except Exception as e:
+        traceback.print_exc()
         return Response(content="An unknown error occured. Please contact the team.", status_code=500)
+
 
 @app.websocket_route("/ws-create-conversation")
 async def ws_create_conversation_handler(websocket: WebSocket):
@@ -291,12 +295,13 @@ async def ws_create_conversation_handler(websocket: WebSocket):
 
         try:
             bot = QABot(bot_id=bot_id)
-            # TODO: fix type error below.
-            for (cid, response) in bot.create_conversation_with_query(query=query, stream=True): # type: ignore
-                await websocket.send_json({
-                    "conversation_id": cid,
-                    "response": response,
-                })
+            for cid, response in bot.create_conversation_with_query(query=query, stream=True):
+                await websocket.send_json(
+                    {
+                        "conversation_id": cid,
+                        "response": response,
+                    }
+                )
         except openai.error.RateLimitError:
             await websocket.close(reason="OpenAI's server are currently overloaded. Please try again later.", code=1003)
         except BadBotInputError as e:
@@ -305,8 +310,9 @@ async def ws_create_conversation_handler(websocket: WebSocket):
         except openai.error.ServiceUnavailableError:
             await websocket.close(reason="OpenAI's server are currently overloaded. Please try again later.", code=1003)
     except Exception as e:
-        await websocket.close(reason="An unknown error occured. Please contact the team.", code=1003)
         traceback.print_exc()
+        await websocket.close(reason="An unknown error occured. Please contact the team.", code=1003)
+
 
 @app.post("/continue-conversation")
 async def continue_conversation_handler(request: Request):
@@ -326,7 +332,8 @@ async def continue_conversation_handler(request: Request):
 
         bot = QABot(bot_id=bot_id)
         try:
-            response = bot.continue_conversation_with_query(conversation_id=conversation_id, query=query)
+            for response in bot.continue_conversation_with_query(conversation_id=conversation_id, query=query):
+                break
         except ConversationNotFoundError:
             return Response(content="Conversation not found. Please check `conversation_id`", status_code=400)
         except openai.error.RateLimitError:
@@ -342,7 +349,9 @@ async def continue_conversation_handler(request: Request):
             "response": response,
         }
     except Exception as e:
+        traceback.print_exc()
         return Response(content="An unknown error occured. Please contact the team.", status_code=500)
+
 
 @app.websocket_route("/ws-continue-conversation")
 async def ws_continue_conversation_handler(websocket: WebSocket):
@@ -363,10 +372,14 @@ async def ws_continue_conversation_handler(websocket: WebSocket):
 
         bot = QABot(bot_id=bot_id)
         try:
-            for response in bot.continue_conversation_with_query(conversation_id=conversation_id, query=query, stream=True):
-                await websocket.send_json({
-                    "response": response,
-                })
+            for response in bot.continue_conversation_with_query(
+                conversation_id=conversation_id, query=query, stream=True
+            ):
+                await websocket.send_json(
+                    {
+                        "response": response,
+                    }
+                )
         except ConversationNotFoundError:
             await websocket.close(reason="Conversation not found. Please check `conversation_id`", code=1003)
         except openai.error.RateLimitError:
@@ -376,8 +389,8 @@ async def ws_continue_conversation_handler(websocket: WebSocket):
             await websocket.close(reason="OpenAI's server are currently overloaded. Please try again later.", code=1003)
 
     except Exception as e:
-        await websocket.close(reason="An unknown error occured. Please contact the team.", code=1003)
         traceback.print_exc()
+        await websocket.close(reason="An unknown error occured. Please contact the team.", code=1003)
 
 
 if __name__ == "__main__":
